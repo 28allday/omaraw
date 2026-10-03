@@ -1,0 +1,78 @@
+--- a/src/iop/omarawprint.c
++++ b/src/iop/omarawprint.c
+@@ -1,7 +1,6 @@
+ // SPDX-License-Identifier: GPL-3.0-or-later
+-// OmaRAW print stock: the scene photographed on a colour negative, printed
+-// on a release-print stock and projected, or on a still negative printed on
+-// photographic paper, from tables baked out of the makers' data sheets
++// OmaRAW film looks: cinema uses a digital Cineon handoff; still negatives
++// retain their photographic-paper model. Tables use the makers' data sheets
+ // (docs/PRINT-STOCKS.md). Working RGB in, display-linear RGB out; the tone
+ // mapper is off while a stock is chosen.
+ //
+@@ -26,8 +25,8 @@
+   "kodak-2383", "kodak-2393", "fuji-3510", "fuji-3513di", "fuji-3521xd", "fuji-3523xd", "agfa-cp30", "kodak-2302",
+   "kodak-portra-160-endura", "kodak-portra-400-endura", "kodak-portra-800-endura", "kodak-ektar-100-endura",
+   "kodak-gold-200-endura", "kodak-ultramax-400-endura",
+-  "kodak-2383-v2", "kodak-2393-v2", "fuji-3510-v2", "fuji-3513di-v2", "fuji-3521xd-v2", "fuji-3523xd-v2",
+-  "agfa-cp30-v2", "kodak-2302-v2", NULL, "kodak-2383-v3"
++  "kodak-2383-v2", "kodak-2393-digital", "fuji-3510-digital", "fuji-3513di-digital", "fuji-3521xd-digital", "fuji-3523xd-digital",
++  "agfa-cp30-digital", "kodak-2302-digital", NULL, "kodak-2383-digital"
+ };
+ 
+ typedef enum dt_iop_omarawprint_stock_t
+@@ -236,7 +235,7 @@
+   if(!f) { dt_print(DT_DEBUG_ALWAYS, "[omarawprint] no tables at %s", file); return 0; }
+   omaraw_print_tables_t t = { 0 };
+   char magic[4]; uint32_t head[3]; float consts[8];
+-  int ok = fread(magic, 1, 4, f) == 4 && memcmp(magic, "OMPT", 4) == 0 && fread(head, 4, 3, f) == 3 && head[0] == 3
++  int ok = fread(magic, 1, 4, f) == 4 && memcmp(magic, "OMPT", 4) == 0 && fread(head, 4, 3, f) == 3 && (head[0] == 3 || head[0] == 4)
+            && head[1] >= 2 && head[1] <= 256 && head[2] >= 2 && head[2] <= 65536   // a cube and curves to interpolate in
+            && fread(consts, 4, 8, f) == 8 && fread(t.m, 4, 9, f) == 9;
+   if(ok)
+@@ -248,7 +247,8 @@
+     // same shape: a span to divide by and an output range to scale into.
+     for(int i = 0; i < 8; i++) ok = ok && isfinite(consts[i]);
+     for(int i = 0; i < 9; i++) ok = ok && isfinite(t.m[i]);
+-    ok = ok && t.grey > 0.0f && t.nl_max > t.nl_min && t.apd_max > 0.0f && t.ll_min < 0.0f;
++    ok = ok && t.grey > 0.0f && t.nl_max > t.nl_min && t.apd_max > 0.0f
++         && ((head[0] == 3 && t.ll_min < 0.0f) || (head[0] == 4 && t.ll_min == 0.0f));
+   }
+   if(ok)
+   {
+@@ -327,11 +327,15 @@
+   memcpy(d->white, omaraw_print_white[CLAMP((int)p->white, 0, 3)], sizeof(d->white));
+   // Printed white: a white card's print, not the clear base, is display
+   // white; measured from the tables so every stock's own paper tint stays.
++  const int digital = (p->stock >= 15 && p->stock <= 21) || p->stock == OMARAW_PRINT_CINEMA_2383_V3;
++  // Digital cinema tables already include their display white and gamut
++  // rendering. Applying the paper scale or grey-axis correction again would
++  // change that look. Still-film and camera-profile behaviour is unchanged.
+   d->paper = 1.0f;
+-  d->balanced = d->tables && p->paper == OMARAW_PRINT_PAPER_BALANCED
++  d->balanced = !digital && d->tables && p->paper == OMARAW_PRINT_PAPER_BALANCED
+                 && p->stock != OMARAW_PRINT_CAMERA_PROFILE;
+   if(d->balanced) _neutral_balance(d);
+-  if(d->tables && p->paper == OMARAW_PRINT_PAPER_PRINTED)
++  if(!digital && d->tables && p->paper == OMARAW_PRINT_PAPER_PRINTED)
+   {
+     // Measured with neutral printer lights and densities: the white level
+     // belongs to the stock, so the lab's trims still move the print.
+@@ -387,7 +391,16 @@
+   _cube(t->a3, t->size, nd, apd);
+   for(int c = 0; c < 3; c++) pd[c] = _curve(t->b1, t->n, c, (apd[c] * t->apd_max * gain[c] - trim[c]) / t->apd_max);
+   _cube(t->b2, t->size, pd, ll);
+-  for(int c = 0; c < 3; c++) light[c] = exp2f(t->ll_min + ll[c] * -t->ll_min);
++  if(t->ll_min == 0.0f)
++  {
++    // OMPT4 stores linear Rec.709 display RGB, so trilinear interpolation
++    // is a convex gamut-preserving mixture. Return the module's Rec.2020.
++    light[0] = 0.627403896f * ll[0] + 0.329283038f * ll[1] + 0.043313066f * ll[2];
++    light[1] = 0.069097289f * ll[0] + 0.919540395f * ll[1] + 0.011362316f * ll[2];
++    light[2] = 0.016391439f * ll[0] + 0.088013308f * ll[1] + 0.895595253f * ll[2];
++  }
++  else
++    for(int c = 0; c < 3; c++) light[c] = exp2f(t->ll_min + ll[c] * -t->ll_min);
+ }
+ 
+ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,

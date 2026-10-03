@@ -1,0 +1,154 @@
+[
+  {
+    "stock": "kodak-2383",
+    "input": "scene-linear Rec.2020 -> Rec.709 primaries / Cineon Film Log",
+    "output": "display-linear Rec.2020; SDR Rec.709 gamut",
+    "camera_negative": false,
+    "lad_code": 445,
+    "lad_Y": 0.1,
+    "peak_code": 1023,
+    "peak_Y": 1,
+    "display_white_rgb709": [
+      0.9137151385000355,
+      0.8907586101203055,
+      0.7974291175142489
+    ],
+    "display_exponent": 1.179854000152411,
+    "maximum_monotonic_curve_adjustment": 0.0,
+    "fitted_to_third_party_LUT": false,
+    "spectral_donor": null
+  },
+  {
+    "stock": "kodak-2393",
+    "input": "scene-linear Rec.2020 -> Rec.709 primaries / Cineon Film Log",
+    "output": "display-linear Rec.2020; SDR Rec.709 gamut",
+    "camera_negative": false,
+    "lad_code": 445,
+    "lad_Y": 0.1,
+    "peak_code": 1023,
+    "peak_Y": 1,
+    "display_white_rgb709": [
+      0.8883280852018316,
+      0.8818059369748071,
+      0.8477079492195565
+    ],
+    "display_exponent": 1.1380439545537127,
+    "maximum_monotonic_curve_adjustment": 0.0,
+    "fitted_to_third_party_LUT": false,
+    "spectral_donor": null
+  },
+  {
+    "stock": "fuji-3510",
+    "input": "scene-linear Rec.2020 -> Rec.709 primaries / Cineon Film Log",
+    "output": "display-linear Rec.2020; SDR Rec.709 gamut",
+    "camera_negative": false,
+    "lad_code": 445,
+    "lad_Y": 0.1,
+    "peak_code": 1023,
+    "peak_Y": 1,
+    "display_white_rgb709": [
+      0.8429840778145782,
+      0.822979000583101,
+      0.7429146093804534
+    ],
+    "display_exponent": 1.2294432376191897,
+    "maximum_monotonic_curve_adjustment": 0.0,
+    "fitted_to_third_party_LUT": false,
+    "spectral_donor": "kodak-2383"
+  },
+  {
+    "stock": "fuji-3513di",
+    "input": "scene-linear Rec.2020 -> Rec.709 primaries / Cineon Film Log",
+    "output": "display-linear Rec.2020; SDR Rec.709 gamut",
+    "camera_negative": false,
+    "lad_code": 445,
+    "lad_Y": 0.1,
+    "peak_code": 1023,
+    "peak_Y": 1,
+    "display_white_rgb709": [
+      0.8628407635115153,
+      0.824931636264239,
+      0.7442102588623022
+    ],
+    "display_exponent": 1.2251547585815625,
+    "maximum_monotonic_curve_adjustment": 6.0000000000004494e-05,
+    "fitted_to_third_party_LUT": false,
+    "spectral_donor": "kodak-2383"
+  },
+  {
+    "stock": "fuji-3521xd",
+    "input": "scene-linear Rec.2020 -> Rec.709 primaries / Cineon Film Log",
+    "output": "display-linear Rec.2020; SDR Rec.709 gamut",
+    "camera_negative": false,
+    "lad_code": 445,
+    "lad_Y": 0.1,
+    "peak_code": 1023,
+    "peak_Y": 1,
+    "display_white_rgb709": [
+      0.8644340392627778,
+      0.8558670218777918,
+      0.7645533843653354
+    ],
+    "display_exponent": 1.2066400386663705,
+    "maximum_monotonic_curve_adjustment": 0.0022800000000000042,
+    "fitted_to_third_party_LUT": false,
+    "spectral_donor": "kodak-2383"
+  },
+  {
+    "stock": "fuji-3523xd",
+    "input": "scene-linear Rec.2020 -> Rec.709 primaries / Cineon Film Log",
+    "output": "display-linear Rec.2020; SDR Rec.709 gamut",
+    "camera_negative": false,
+    "lad_code": 445,
+    "lad_Y": 0.1,
+    "peak_code": 1023,
+    "peak_Y": 1,
+    "display_white_rgb709": [
+      0.8526435611942484,
+      0.8286413652807068,
+      0.8422649717677663
+    ],
+    "display_exponent": 1.2180997648606144,
+    "maximum_monotonic_curve_adjustment": 0.0027699999999999947,
+    "fitted_to_third_party_LUT": false,
+    "spectral_donor": "kodak-2383"
+  },
+  {
+    "stock": "agfa-cp30",
+    "input": "scene-linear Rec.2020 -> Rec.709 primaries / Cineon Film Log",
+    "output": "display-linear Rec.2020; SDR Rec.709 gamut",
+    "camera_negative": false,
+    "lad_code": 445,
+    "lad_Y": 0.1,
+    "peak_code": 1023,
+    "peak_Y": 1,
+    "display_white_rgb709": [
+      0.8219859055882273,
+      0.8009498333137154,
+      0.7439682170962236
+    ],
+    "display_exponent": 1.1124919280569452,
+    "maximum_monotonic_curve_adjustment": 0.0,
+    "fitted_to_third_party_LUT": false,
+    "spectral_donor": null
+  },
+  {
+    "stock": "kodak-2302",
+    "input": "scene-linear Rec.2020 -> Rec.709 primaries / Cineon Film Log",
+    "output": "display-linear Rec.2020; SDR Rec.709 gamut",
+    "camera_negative": false,
+    "lad_code": 445,
+    "lad_Y": 0.1,
+    "peak_code": 1023,
+    "peak_Y": 1,
+    "display_white_rgb709": [
+      0.9338788767932071,
+      0.9338788767932071,
+      0.9338788767932071
+    ],
+    "display_exponent": 1.030619124993468,
+    "maximum_monotonic_curve_adjustment": 0.00179,
+    "fitted_to_third_party_LUT": false,
+    "spectral_donor": null
+  }
+]

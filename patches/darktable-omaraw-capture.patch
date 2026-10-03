@@ -1,0 +1,38 @@
+--- a/src/develop/imageop.h
++++ b/src/develop/imageop.h
+@@ -440,6 +440,10 @@
+ /* returns the iop-module found in list with the given name */
+ dt_iop_module_t *dt_iop_get_module_from_list(GList *iop_list, const char *op);
+ dt_iop_module_t *dt_iop_get_module(const char *op);
++/* OmaRAW: the capture-sharpening radius last measured on a whole frame at
++   full size (0 when none), so the application can store one radius for
++   every render instead of each region measuring its own. */
++extern float dt_omaraw_capture_whole_radius;
+ dt_iop_module_so_t *dt_iop_get_module_so(const char *op);
+ /** returns module with op + multi_priority or NULL if not found on the list,
+     if multi_priority == -1 do not check for it */
+--- a/src/develop/imageop.c
++++ b/src/develop/imageop.c
+@@ -3670,6 +3670,8 @@
+   return result;
+ }
+ 
++float dt_omaraw_capture_whole_radius = 0.0f;
++
+ dt_iop_module_t *dt_iop_get_module(const char *op)
+ {
+   return dt_iop_get_module_from_list(darktable.develop->iop, op);
+--- a/src/iop/demosaicing/capture.c
++++ b/src/iop/demosaicing/capture.c
+@@ -795,6 +795,11 @@
+       dt_control_log(_("imprecise radius calculation due to cropping or because you are zoomed in too much"));
+   }
+   d->cs_radius = radius;
++  // OmaRAW: a measurement over the whole frame at full size is the one to
++  // keep; a region's own centre is not.
++  // (A full render's area can start a pixel or two in, for the CFA pattern.)
++  if(roi->x <= 8 && roi->y <= 8 && roi->width >= img->p_width - 16 && roi->height >= img->p_height - 16)
++    dt_omaraw_capture_whole_radius = radius;
+ }
+ 
+ static void _capture_noise(dt_iop_module_t *self,

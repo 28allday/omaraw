@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=OmaRAW
+GenericName=Photo Library and RAW Developer
+Comment=Catalog, cull, develop and export photographs
+Exec=omaraw %f
+Icon=omaraw
+Terminal=false
+Categories=Graphics;Photography;RasterGraphics;
+MimeType=image/x-fuji-raf;image/x-nikon-nef;image/x-canon-cr2;image/x-canon-cr3;image/x-sony-arw;image/x-adobe-dng;image/x-olympus-orf;image/x-panasonic-rw2;image/x-pentax-pef;image/jpeg;image/tiff;image/png;image/webp;image/heif;image/heic;image/avif;image/jxl;
+StartupWMClass=omaraw

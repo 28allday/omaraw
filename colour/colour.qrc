@@ -1,0 +1,3 @@
+<RCC><qresource prefix="/colour">
+  <file alias="oma-colour-1.ocio">oma-v1/config.ocio</file>
+</qresource></RCC>

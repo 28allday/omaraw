@@ -1,0 +1,60 @@
+module OmaRaw.Develop
+DevelopWorkspace 1.0 DevelopWorkspace.qml
+AdjustmentPanel 1.0 AdjustmentPanel.qml
+ImageMatchPanel 1.0 ImageMatchPanel.qml
+ImageMatchComparison 1.0 ImageMatchComparison.qml
+AdjustmentRow 1.0 AdjustmentRow.qml
+ModuleRows 1.0 ModuleRows.qml
+ToolCard 1.0 ToolCard.qml
+ModuleTool 1.0 ModuleTool.qml
+PrintStockTool 1.0 PrintStockTool.qml
+GroupedTool 1.0 GroupedTool.qml
+BlockHeading 1.0 BlockHeading.qml
+HistoryPanel 1.0 HistoryPanel.qml
+DevelopViewer 1.0 DevelopViewer.qml
+PresetPanel 1.0 PresetPanel.qml
+ModuleActions 1.0 ModuleActions.qml
+SnapshotPanel 1.0 SnapshotPanel.qml
+LocalPanel 1.0 LocalPanel.qml
+LocalColourWheel 1.0 LocalColourWheel.qml
+LocalOverlay 1.0 LocalOverlay.qml
+PenMaskOverlay 1.0 PenMaskOverlay.qml
+StrokeGuide 1.0 StrokeGuide.qml
+RetouchPanel 1.0 RetouchPanel.qml
+RetouchOverlay 1.0 RetouchOverlay.qml
+CurveEditor 1.0 CurveEditor.qml
+CurvePanel 1.0 CurvePanel.qml
+LabCurvePanel 1.0 LabCurvePanel.qml
+ZonesPanel 1.0 ZonesPanel.qml
+SelectiveColourPanel 1.0 SelectiveColourPanel.qml
+NoiseReductionPanel 1.0 NoiseReductionPanel.qml
+FalseColourLegend 1.0 FalseColourLegend.qml
+ScopeView 1.0 ScopeView.qml
+ScopeOverlay 1.0 ScopeOverlay.qml
+FalseColourGuide 1.0 FalseColourGuide.qml
+CropOverlay 1.0 CropOverlay.qml
+SyncDialog 1.0 SyncDialog.qml
+LensPanel 1.0 LensPanel.qml
+PresetRuleDialog 1.0 PresetRuleDialog.qml
+
+CropToolbar 1.0 CropToolbar.qml
+
+NativeToolsPanel 1.0 NativeToolsPanel.qml
+
+ExternalMaskPanel 1.0 ExternalMaskPanel.qml
+
+ColourWheel 1.0 ColourWheel.qml
+ColourBalanceZone 1.0 ColourBalanceZone.qml
+
+PrimaryGradePanel 1.0 PrimaryGradePanel.qml
+AiPanel 1.0 AiPanel.qml
+AiVersionsBar 1.0 AiVersionsBar.qml
+DenoisePanel 1.0 DenoisePanel.qml
+DenoisePreview 1.0 DenoisePreview.qml
+AiSelectionOverlay 1.0 AiSelectionOverlay.qml
+ColourGradingPanel 1.0 ColourGradingPanel.qml
+CreativeProfilePanel 1.0 CreativeProfilePanel.qml
+CameraProfilePanel 1.0 CameraProfilePanel.qml
+
+SourceDock 1.0 SourceDock.qml
+SourceDockPanel 1.0 SourceDockPanel.qml

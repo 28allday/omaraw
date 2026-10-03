@@ -1,0 +1,114 @@
+--- a/src/iop/omarawprint.c
++++ b/src/iop/omarawprint.c
+@@ -75,7 +75,8 @@
+ 
+ typedef enum dt_iop_omarawprint_paper_t
+ {
+-  OMARAW_PRINT_PAPER_PRINTED = 0,  // $DESCRIPTION: "printed white"
++  OMARAW_PRINT_PAPER_BALANCED = 2, // $DESCRIPTION: "balanced print"
++  OMARAW_PRINT_PAPER_PRINTED = 0,  // $DESCRIPTION: "printed white (legacy)"
+   OMARAW_PRINT_PAPER_BASE = 1,     // $DESCRIPTION: "clear base"
+ } dt_iop_omarawprint_paper_t;
+ 
+@@ -84,7 +85,7 @@
+   dt_iop_omarawprint_stock_t stock; // $DEFAULT: OMARAW_PRINT_CINEMA_2383_V3 $DESCRIPTION: "stock"
+   float strength;   // $MIN: 0.0 $MAX: 100.0 $DEFAULT: 100.0 $DESCRIPTION: "strength"
+   dt_iop_omarawprint_white_t white; // $DEFAULT: OMARAW_PRINT_WHITE_D65 $DESCRIPTION: "display white"
+-  dt_iop_omarawprint_paper_t paper; // $DEFAULT: OMARAW_PRINT_PAPER_PRINTED $DESCRIPTION: "white"
++  dt_iop_omarawprint_paper_t paper; // $DEFAULT: OMARAW_PRINT_PAPER_BALANCED $DESCRIPTION: "white"
+   float trim_r;     // $MIN: -1.0 $MAX: 1.0 $DEFAULT: 0.0 $DESCRIPTION: "red printer light"
+   float trim_g;     // $MIN: -1.0 $MAX: 1.0 $DEFAULT: 0.0 $DESCRIPTION: "green printer light"
+   float trim_b;     // $MIN: -1.0 $MAX: 1.0 $DEFAULT: 0.0 $DESCRIPTION: "blue printer light"
+@@ -126,13 +127,17 @@
+   uint16_t *a2, *a3, *b1, *b2;
+ } omaraw_print_tables_t;
+ 
++#define OMARAW_PRINT_BALANCE_SAMPLES 1024
++
+ typedef struct dt_iop_omarawprint_data_t
+ {
+   oma_print_blend_t blend; // must stay first: shared with the float pixelpipe
+   const omaraw_print_tables_t *tables;
+   float trim[3], gain[3];
+   float white[9];   // linear Rec.2020 in -> out: a D65 white shown as the chosen white
+-  float paper;      // light scale: 1 for the clear base as white, more for a printed white
++  float paper;      // legacy light scale
++  int balanced;
++  float balance[OMARAW_PRINT_BALANCE_SAMPLES][3]; // gains indexed by log2 output luminance
+ } dt_iop_omarawprint_data_t;
+ 
+ // Bradford adaptation of a D65 white to D60, D55 and D50, in linear
+@@ -260,6 +265,55 @@
+ 
+ static inline void _print(const omaraw_print_tables_t *t, const float trim[3], const float gain[3], const float p[3], float light[3]);
+ 
++// The approximate spectral model has a blue/yellow crossover even on an
++// achromatic scene. Calibrate its neutral axis without replacing the film's
++// luminance curve or its response to chromatic inputs. This is a display
++// correction, not a claim of measured spectral accuracy (PRINT-STOCKS, 15).
++static inline float _luminance(const float p[3])
++{
++  return 0.2627f * p[0] + 0.6780f * p[1] + 0.0593f * p[2];
++}
++
++static void _neutral_balance(dt_iop_omarawprint_data_t *d)
++{
++  float axis[OMARAW_PRINT_BALANCE_SAMPLES][4];
++  const float none[3] = {0, 0, 0}, unit[3] = {1, 1, 1};
++  for(int i = 0; i < OMARAW_PRINT_BALANCE_SAMPLES; i++)
++  {
++    const float v = exp2f(-20.0f + 40.0f * i / (OMARAW_PRINT_BALANCE_SAMPLES - 1));
++    const float grey[3] = {v, v, v};
++    float light[3];
++    _print(d->tables, none, unit, grey, light);
++    const float y = _luminance(light);
++    axis[i][0] = log2f(fmaxf(y, 0x1p-16f));
++    // Quantisation can create tiny plateaus. Keep the inverse axis monotone.
++    if(i) axis[i][0] = fmaxf(axis[i][0], axis[i-1][0]);
++    for(int c = 0; c < 3; c++) axis[i][c+1] = y / fmaxf(light[c], 0x1p-16f);
++  }
++  int j = 0;
++  for(int i = 0; i < OMARAW_PRINT_BALANCE_SAMPLES; i++)
++  {
++    const float x = -16.0f + 16.0f * i / (OMARAW_PRINT_BALANCE_SAMPLES - 1);
++    while(j < OMARAW_PRINT_BALANCE_SAMPLES - 2 && axis[j+1][0] < x) j++;
++    const float span = axis[j+1][0] - axis[j][0];
++    const float f = span > 1e-8f ? CLAMP((x - axis[j][0]) / span, 0.0f, 1.0f) : 0.0f;
++    for(int c = 0; c < 3; c++) d->balance[i][c] = axis[j][c+1] * (1-f) + axis[j+1][c+1] * f;
++  }
++}
++
++static inline void _balance(const dt_iop_omarawprint_data_t *d, float light[3])
++{
++  const float y = _luminance(light);
++  const float x = CLAMP((log2f(fmaxf(y, 0x1p-16f)) + 16.0f) / 16.0f, 0.0f, 1.0f)
++                  * (OMARAW_PRINT_BALANCE_SAMPLES - 1);
++  const int i = MIN((int)x, OMARAW_PRINT_BALANCE_SAMPLES - 2);
++  const float f = x - i;
++  for(int c = 0; c < 3; c++) light[c] *= d->balance[i][c] * (1-f) + d->balance[i+1][c] * f;
++  // Retain the film's luminance for coloured pixels as well as neutrals.
++  const float scale = y / fmaxf(_luminance(light), 0x1p-24f);
++  for(int c = 0; c < 3; c++) light[c] *= scale;
++}
++
+ void commit_params(dt_iop_module_t *self, dt_iop_params_t *params, dt_dev_pixelpipe_t *pipe,
+                    dt_dev_pixelpipe_iop_t *piece)
+ {
+@@ -274,6 +328,9 @@
+   // Printed white: a white card's print, not the clear base, is display
+   // white; measured from the tables so every stock's own paper tint stays.
+   d->paper = 1.0f;
++  d->balanced = d->tables && p->paper == OMARAW_PRINT_PAPER_BALANCED
++                && p->stock != OMARAW_PRINT_CAMERA_PROFILE;
++  if(d->balanced) _neutral_balance(d);
+   if(d->tables && p->paper == OMARAW_PRINT_PAPER_PRINTED)
+   {
+     // Measured with neutral printer lights and densities: the white level
+@@ -377,6 +434,7 @@
+     for(int c = 0; c < 3; c++)
+       p2020[c] = convert ? to2020[c][0] * p[0] + to2020[c][1] * p[1] + to2020[c][2] * p[2] : p[c];
+     _print(t, d->trim, d->gain, p2020, light);
++    if(d->balanced) _balance(d, light);
+     for(int c = 0; c < 3; c++) light[c] *= paper;
+     for(int c = 0; c < 3; c++) shown[c] = d->white[c * 3 + 0] * light[0] + d->white[c * 3 + 1] * light[1] + d->white[c * 3 + 2] * light[2];
+     for(int c = 0; c < 3; c++)

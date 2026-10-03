@@ -1,0 +1,53 @@
+--- a/src/common/mipmap_cache.c
++++ b/src/common/mipmap_cache.c
+@@ -393,6 +393,14 @@
+                     dt_colorspaces_color_profile_type_t *color_space,
+                     const dt_imgid_t imgid,
+                     const dt_mipmap_size_t size);
++
++// OmaRAW supplies verified reduced source pixels and original camera metadata.
++// Called only when the normal path resolver selects its managed preview.
++static int (*omaraw_smart_loader)(dt_image_t *, dt_mipmap_buffer_t *, const char *) = NULL;
++void dt_omaraw_set_smart_loader(int (*callback)(dt_image_t *, dt_mipmap_buffer_t *, const char *))
++{
++  omaraw_smart_loader = callback;
++}
+ 
+ // callback for the imageio core to allocate memory.
+ // only needed for _F and _FULL buffers, as they change size
+@@ -1005,12 +1013,14 @@
+         buf->width = buf->height = 0;
+         buf->iscale = 0.0f;
+         buf->color_space = DT_COLORSPACE_NONE; // TODO: does the full buffer need to know this?
+-        dt_imageio_retval_t ret =
+-          dt_imageio_open(&buffered_image, filename, buf); // TODO: color_space?
++        const int smart = omaraw_smart_loader ? omaraw_smart_loader(&buffered_image, buf, filename) : 0;
++        dt_imageio_retval_t ret = smart > 0 ? DT_IMAGEIO_OK : smart < 0 ? DT_IMAGEIO_LOAD_FAILED
++          : dt_imageio_open(&buffered_image, filename, buf); // TODO: color_space?
+         buf->loader_status = ret;
+         // might have been reallocated:
+         ASAN_UNPOISON_MEMORY_REGION(entry->data, dt_mipmap_buffer_dsc_size);
+         dsc = (dt_mipmap_buffer_dsc_t *)buf->cache_entry->data;
++        if(smart > 0) dsc->iscale = buf->iscale;
+         if(ret == DT_IMAGEIO_OK)
+         {
+           // swap back new image data:
+@@ -1375,6 +1385,18 @@
+   // writing during raw loading, to write to width/height.
+   const dt_image_t *image = dt_image_cache_get(imgid, 'r');
+ 
++  // A Smart Preview already is reduced. Never index it using the original
++  // sensor dimensions or upsample it into the full source footprint.
++  if(buf.buf && buf.iscale > 1.0f)
++  {
++    const gboolean fits = buf.width <= wd && buf.height <= ht;
++    if(fits) memcpy(out, buf.buf, (size_t)buf.width * buf.height * dt_iop_buffer_dsc_to_bpp(&image->buf_dsc));
++    *width = fits ? buf.width : 0; *height = fits ? buf.height : 0;
++    *iscale = fits ? buf.iscale : 0.0f;
++    dt_image_cache_read_release(image); dt_mipmap_cache_release(&buf);
++    return;
++  }
++
+   dt_iop_roi_t roi_in;
+   roi_in.x = roi_in.y = 0;
+   roi_in.width = image->width;

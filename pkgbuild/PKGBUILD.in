@@ -1,0 +1,268 @@
+# Maintainer: 28allday
+# bin/package snapshots the app and fills its checksum in this template.
+
+pkgname=omaraw
+pkgver=0.1.0beta1
+pkgrel=1
+url='https://github.com/28allday/omaraw'
+pkgdesc='Catalog, cull, develop and export photographs'
+arch=('x86_64')
+license=('GPL-3.0-or-later')
+install=omaraw.install
+options=('!debug' '!lto')
+depends=(
+  'glibc' 'libgcc' 'libstdc++' 'libgomp' 'qt6-base' 'qt6-declarative' 'qt6-imageformats' 'qt6-svg'
+  'qt6-multimedia' 'qt6-multimedia-ffmpeg'
+  'libraw' 'exiv2' 'libgphoto2' 'libheif' 'lcms2' 'opencolorio>=2.5' 'lensfun' 'sqlite'
+  'glib2' 'gtk3' 'libxml2' 'potrace' 'openexr' 'imath' 'libjxl' 'libwebp'
+  'libavif' 'librsvg' 'pugixml' 'json-glib' 'curl' 'libjpeg-turbo' 'libpng'
+  'libtiff' 'zlib' 'opencv' 'openjpeg2' 'hicolor-icon-theme'
+  'xdg-desktop-portal' 'libplacebo' 'vulkan-icd-loader'
+  'wayland' 'qt6-wayland' 'gdk-pixbuf2' 'icu' 'cairo' 'pango' 'util-linux'
+)
+optdepends=(
+  'python: optional local AI masking and removal tools'
+  'vulkan-radeon: GPU processing and interface on AMD graphics'
+  'nvidia-utils: GPU processing and interface on NVIDIA graphics'
+  'vulkan-intel: GPU processing and interface on Intel graphics'
+  'vulkan-swrast: a software Vulkan device where no GPU driver exists'
+  'gphoto2: command-line camera tools alongside tethering'
+  'xdg-desktop-portal-gtk: file dialogs where the desktop has no portal of its own'
+)
+makedepends=('cmake' 'ninja' 'python' 'intltool' 'libxslt' 'iso-codes' 'vulkan-headers')
+checkdepends=('desktop-file-utils')
+
+_dt=281f60c9957b05b9379084b272c81a5e62fa46e3
+_rawspeed=7cf3dc3b9d9c82b414198b1f57460478be6c6c9d
+_opencl=8a97ebc88daa3495d6f57ec10bb515224400186f
+_xcf=64efecf63ddd952ccf654e479714aaae6f8c5986
+_whereami=e07bc35ecd92ee4c3ac71cf0fb6b01132bfa50de
+_libraw=4f0144031c4adfadf7e053937826c49ed80cfa89
+_prefix=/usr/lib/omaraw/engine
+_jobs=${OMARAW_BUILD_JOBS:-8}
+
+source=(
+  "omaraw-$pkgver.tar.gz"
+  "omaraw.install"
+  "darktable-$_dt.tar.gz::https://codeload.github.com/darktable-org/darktable/tar.gz/$_dt"
+  "rawspeed-$_rawspeed.tar.gz::https://codeload.github.com/darktable-org/rawspeed/tar.gz/$_rawspeed"
+  "OpenCL-Headers-$_opencl.tar.gz::https://codeload.github.com/KhronosGroup/OpenCL-Headers/tar.gz/$_opencl"
+  "libxcf-$_xcf.tar.gz::https://codeload.github.com/houz/libxcf/tar.gz/$_xcf"
+  "whereami-$_whereami.tar.gz::https://codeload.github.com/gpakosz/whereami/tar.gz/$_whereami"
+  "LibRaw-$_libraw.tar.gz::https://codeload.github.com/LibRaw/LibRaw/tar.gz/$_libraw"
+)
+sha256sums=(
+  '@OMARAW_SHA256@'
+  '@INSTALL_SHA256@'
+  'dd7e6961a981257e080f1ce8b0fa1e80f66df292ee0a80bcaf55062b954c3e12'
+  '15b531f069f87e682d5c4e670115b371c85d9a1924b1a3682eacab2a9f398cd6'
+  '211b3897f91136a9d4ceeb7b892cae88388408ff6c4d06428e9d3f0face2ee53'
+  'c7f51c387729f22534b953740ae6d1a5096e24688aeb640c08bf9cf25f169e2b'
+  '57fa59e0c8ddb80849c8ee7e35b446f8449cdcd9186a9c716e4c1b64e9cc4480'
+  'f3c70df0f3e2638e5a84fb3b31c580a26e8ad395242589b063787225e0e41510'
+)
+
+prepare() {
+  patch -d "$srcdir/darktable-$_dt" -p1 < "$srcdir/omaraw-$pkgver/patches/darktable-ocio.patch"
+  patch -d "$srcdir/darktable-$_dt" -p1 < "$srcdir/omaraw-$pkgver/patches/darktable-omaraw-pipeline.patch"
+  patch -d "$srcdir/darktable-$_dt" -p1 < "$srcdir/omaraw-$pkgver/patches/darktable-omaraw-geometry.patch"
+  patch -d "$srcdir/darktable-$_dt" -p1 < "$srcdir/omaraw-$pkgver/patches/darktable-omaraw-tools.patch"
+  patch -d "$srcdir/darktable-$_dt" -p1 < "$srcdir/omaraw-$pkgver/patches/darktable-omaraw-memory.patch"
+  patch -d "$srcdir/darktable-$_dt" -p1 < "$srcdir/omaraw-$pkgver/patches/darktable-omaraw-smart-previews.patch"
+  patch -d "$srcdir/darktable-$_dt" -p1 < "$srcdir/omaraw-$pkgver/patches/darktable-omaraw-grade.patch"
+  patch -d "$srcdir/darktable-$_dt" -p1 < "$srcdir/omaraw-$pkgver/patches/darktable-omaraw-masks-dir.patch"
+  patch -d "$srcdir/darktable-$_dt" -p1 < "$srcdir/omaraw-$pkgver/patches/darktable-omaraw-halation.patch"
+  patch -d "$srcdir/darktable-$_dt" -p1 < "$srcdir/omaraw-$pkgver/patches/darktable-omaraw-print.patch"
+  patch -d "$srcdir/darktable-$_dt" -p1 < "$srcdir/omaraw-$pkgver/patches/darktable-omaraw-demosaic.patch"
+  patch -d "$srcdir/darktable-$_dt" -p1 < "$srcdir/omaraw-$pkgver/patches/darktable-omaraw-bloom.patch"
+  patch -d "$srcdir/darktable-$_dt" -p1 < "$srcdir/omaraw-$pkgver/patches/darktable-omaraw-vignette.patch"
+  patch -d "$srcdir/darktable-$_dt" -p1 < "$srcdir/omaraw-$pkgver/patches/darktable-omaraw-capture.patch"
+  patch -d "$srcdir/darktable-$_dt" -p1 < "$srcdir/omaraw-$pkgver/patches/darktable-omaraw-colour-consistency.patch"
+  patch -d "$srcdir/darktable-$_dt" -p1 < "$srcdir/omaraw-$pkgver/patches/darktable-omaraw-history.patch"
+  patch -d "$srcdir/darktable-$_dt" -p1 < "$srcdir/omaraw-$pkgver/patches/darktable-omaraw-selective-colour.patch"
+  patch -d "$srcdir/darktable-$_dt" -p1 < "$srcdir/omaraw-$pkgver/patches/darktable-omaraw-primaries.patch"
+  patch -d "$srcdir/darktable-$_dt" -p1 < "$srcdir/omaraw-$pkgver/patches/darktable-omaraw-monochrome.patch"
+  patch -d "$srcdir/darktable-$_dt" -p1 < "$srcdir/omaraw-$pkgver/patches/darktable-omaraw-camera-profiles.patch"
+  patch -d "$srcdir/darktable-$_dt" -p1 < "$srcdir/omaraw-$pkgver/patches/darktable-omaraw-raw-fallback.patch"
+  patch -d "$srcdir/darktable-$_dt" -p1 < "$srcdir/omaraw-$pkgver/patches/darktable-omaraw-preview-alignment.patch"
+  patch -d "$srcdir/darktable-$_dt" -p1 < "$srcdir/omaraw-$pkgver/patches/darktable-omaraw-creative-profile.patch"
+  cp "$srcdir/omaraw-$pkgver/src/engine/creativeprofile.c" "$srcdir/darktable-$_dt/src/iop/omarawprofile.c"
+  cp "$srcdir/omaraw-$pkgver/src/creativeprofilelut.h" "$srcdir/darktable-$_dt/src/common/omaraw_profile.h"
+  patch -d "$srcdir/darktable-$_dt" -p1 < "$srcdir/omaraw-$pkgver/patches/darktable-omaraw-dng-gain.patch"
+  cp "$srcdir/omaraw-$pkgver/src/engine/dng_gain.c" "$srcdir/darktable-$_dt/src/iop/omarawdnggain.c"
+  cp "$srcdir/omaraw-$pkgver/src/engine/dng_gain.h" "$srcdir/darktable-$_dt/src/common/omaraw_dng_gain.h"
+  patch -d "$srcdir/darktable-$_dt" -p1 < "$srcdir/omaraw-$pkgver/patches/darktable-omaraw-enhanced-profile.patch"
+  patch -d "$srcdir/darktable-$_dt" -p1 < "$srcdir/omaraw-$pkgver/patches/darktable-omaraw-colour-order.patch"
+  patch -d "$srcdir/darktable-$_dt" -p1 < "$srcdir/omaraw-$pkgver/patches/darktable-omaraw-ai-calibration.patch"
+  patch -d "$srcdir/darktable-$_dt" -p1 < "$srcdir/omaraw-$pkgver/patches/darktable-omaraw-removal-dng.patch"
+  patch -d "$srcdir/darktable-$_dt" -p1 < "$srcdir/omaraw-$pkgver/patches/darktable-omaraw-repair.patch"
+  cp "$srcdir/omaraw-$pkgver/src/engine/repair.c" "$srcdir/darktable-$_dt/src/iop/omarawrepair.c"
+  patch -d "$srcdir/darktable-$_dt" -p1 < "$srcdir/omaraw-$pkgver/patches/darktable-omaraw-image-match.patch"
+  patch -d "$srcdir/darktable-$_dt" -p1 < "$srcdir/omaraw-$pkgver/patches/darktable-omaraw-print-calibration.patch"
+  patch -d "$srcdir/darktable-$_dt" -p1 < "$srcdir/omaraw-$pkgver/patches/darktable-omaraw-print-display.patch"
+  patch -d "$srcdir/darktable-$_dt" -p1 < "$srcdir/omaraw-$pkgver/patches/darktable-omaraw-digital-film.patch"
+  patch -d "$srcdir/darktable-$_dt" -p1 < "$srcdir/omaraw-$pkgver/patches/darktable-omaraw-workflow-restore.patch"
+  cp "$srcdir/omaraw-$pkgver/src/engine/imagematch.c" "$srcdir/darktable-$_dt/src/iop/omarawmatch.c"
+  cp "$srcdir/omaraw-$pkgver/src/imagematchmath.h" "$srcdir/darktable-$_dt/src/common/imagematchmath.h"
+  cp "$srcdir/omaraw-$pkgver/src/creativeprofiledata.h" "$srcdir/darktable-$_dt/src/common/creativeprofiledata.h"
+  cp "$srcdir/omaraw-$pkgver/src/creativeprofilelut.h" "$srcdir/darktable-$_dt/src/common/creativeprofilelut.h"
+  { printf '#define OMA_PROFILE_EARLY 1\n'; cat "$srcdir/omaraw-$pkgver/src/engine/creativeprofile.c"; } > "$srcdir/darktable-$_dt/src/iop/omarawlook.c"
+  local external="$srcdir/darktable-$_dt/src/external"
+  cp -a "$srcdir/rawspeed-$_rawspeed/." "$external/rawspeed/"
+  cp -a "$srcdir/OpenCL-Headers-$_opencl/." "$external/OpenCL/"
+  cp -a "$srcdir/libxcf-$_xcf/." "$external/libxcf/"
+  cp -a "$srcdir/whereami-$_whereami/." "$external/whereami/"
+  cp -a "$srcdir/LibRaw-$_libraw/." "$external/LibRaw/"
+  patch -d "$external/LibRaw" -p1 < "$srcdir/omaraw-$pkgver/patches/libraw-omaraw-r6iii.patch"
+  patch -d "$external/rawspeed" -p1 < "$srcdir/omaraw-$pkgver/patches/rawspeed-omaraw-arw6.patch"
+  patch -d "$external/rawspeed" -p1 < "$srcdir/omaraw-$pkgver/patches/rawspeed-omaraw-dng-jxl.patch"
+  cp "$srcdir/omaraw-$pkgver/src/engine/dng_jxl.h" "$external/rawspeed/src/librawspeed/decompressors/omaraw_dng_jxl.h"
+  # Source archives have no .git. Keep the tested engine version and year
+  # independent of the build date or any surrounding application's checkout.
+  cat > "$srcdir/darktable-$_dt/src/version_gen.c" <<EOF
+#ifndef RC_BUILD
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
+const char darktable_package_version[] = "${_dt:0:7}";
+const char darktable_package_string[] = PACKAGE_NAME " ${_dt:0:7}";
+const char darktable_last_commit_year[] = "2026";
+#else
+#define DT_MAJOR 0
+#define DT_MINOR 0
+#define DT_PATCH 0
+#define DT_N_COMMITS 0
+#define LAST_COMMIT_YEAR "2026"
+#endif
+EOF
+}
+
+_engine_environment() {
+  export OMARAW_DT_SRC="$srcdir/darktable-$_dt"
+  export OMARAW_DT_BUILD="$srcdir/engine-build"
+  export OMARAW_DT_INSTALL="$srcdir/engine-stage$_prefix"
+}
+
+build() {
+  cmake -S "$srcdir/darktable-$_dt" -B "$srcdir/engine-build" -G Ninja \
+    -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$_prefix" \
+    -DCMAKE_INSTALL_LIBDIR=lib -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+    -DBINARY_PACKAGE_BUILD=ON -DCUSTOM_CFLAGS=ON \
+    -DUSE_OPENMP=ON -DUSE_OPENCL=ON -DTESTBUILD_OPENCL_PROGRAMS=OFF \
+    -DUSE_CAMERA_SUPPORT=ON -DUSE_OPENEXR=ON -DUSE_OPENJPEG=ON \
+    -DUSE_JXL=ON -DUSE_WEBP=ON -DUSE_AVIF=ON -DUSE_HEIF=ON \
+    -DUSE_XCF=ON -DUSE_LIBRAW=ON -DDONT_USE_INTERNAL_LIBRAW=OFF \
+    -DUSE_OPENCV=ON -DUSE_ICU=ON -DBUILD_PRINT=OFF \
+    -DUSE_LUA=OFF -DUSE_MAP=OFF -DUSE_GMIC=OFF -DUSE_AI=OFF \
+    -DUSE_MCP=OFF -DUSE_SDL2=OFF -DUSE_PORTMIDI=OFF \
+    -DUSE_COLORD=OFF -DUSE_KWALLET=OFF -DUSE_LIBSECRET=OFF \
+    -DUSE_GRAPHICSMAGICK=OFF -DUSE_IMAGEMAGICK=OFF -DUSE_UNITY=OFF \
+    -DBUILD_TESTING=OFF -DBUILD_CMSTEST=OFF -DBUILD_RS_IDENTIFY=OFF \
+    -DBUILD_CURVE_TOOLS=OFF -DBUILD_NOISE_TOOLS=OFF \
+    -DVALIDATE_APPDATA_FILE=OFF
+  cmake --build "$srcdir/engine-build" --parallel "$_jobs"
+  DESTDIR="$srcdir/engine-stage" cmake --install "$srcdir/engine-build"
+  # cmake knows nothing about the print stocks: their tables are ours, not
+  # darktable's. They belong in the staged engine rather than only in the
+  # finished package, so the staged engine has its complete rendering data.
+  install -Dm644 -t "$srcdir/engine-stage$_prefix/share/darktable/omaraw/print-stocks" \
+    "$srcdir/omaraw-$pkgver"/data/film/tables/*.ompt
+
+  _engine_environment
+  export OMARAW_DT_RUNTIME_PREFIX="$_prefix"
+  mkdir -p "$srcdir/app-build"
+  cd "$srcdir/app-build"
+  qmake6 "$srcdir/omaraw-$pkgver/omaraw.pro" CONFIG+=require_engine \
+    "QMAKE_CFLAGS_RELEASE=$CFLAGS $CPPFLAGS" \
+    "QMAKE_CXXFLAGS_RELEASE=$CXXFLAGS $CPPFLAGS" "QMAKE_LFLAGS=$LDFLAGS"
+  make -j"$_jobs"
+}
+
+check() {
+  python3 "$srcdir/omaraw-$pkgver/tools/audit-camera-profiles.py"
+  desktop-file-validate "$srcdir/omaraw-$pkgver/pkgbuild/omaraw.desktop"
+}
+
+package() {
+  local app="$srcdir/omaraw-$pkgver"
+  install -Dm755 "$srcdir/app-build/omaraw" "$pkgdir/usr/bin/omaraw"
+  install -d "$pkgdir$_prefix/lib" "$pkgdir$_prefix/share"
+  cp -a --no-preserve=ownership "$srcdir/engine-stage$_prefix/lib/darktable" "$pkgdir$_prefix/lib/"
+  cp -a --no-preserve=ownership "$srcdir/engine-stage$_prefix/share/darktable" "$pkgdir$_prefix/share/"
+  # The print-stock tables arrive with the copy above: build() stages them
+  # beside the engine so the suite can exercise them.
+  # These maintenance scripts/completions target the standalone darktable app.
+  rm -r "$pkgdir$_prefix/share/darktable/tools" "$pkgdir$_prefix/share/darktable/darktable.bash"
+  install -Dm644 "$app/LICENSE" "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 "$app/THIRD_PARTY.md" "$pkgdir/usr/share/licenses/$pkgname/THIRD_PARTY.md"
+  install -Dm644 "$app/src/launch/fonts/OFL.txt" "$pkgdir/usr/share/licenses/$pkgname/OFL.JetBrainsMono.txt"
+  install -Dm644 "$app/src/denoise/LICENSES.txt" "$pkgdir/usr/share/licenses/$pkgname/AI-DENOISE.txt"
+  install -Dm644 "$app/src/ai/LICENSES.txt" "$pkgdir/usr/share/licenses/$pkgname/AI-TOOLS.txt"
+  install -Dm644 "$app/data/autotag/LICENSE" "$pkgdir/usr/share/licenses/$pkgname/LICENSE.YOLOX"
+  install -Dm644 "$app/data/autotag/SOURCE.md" "$pkgdir/usr/share/licenses/$pkgname/YOLOX-SOURCE.md"
+  for notice in NOTICE.md CC0-1.0.txt manifest.json; do
+    install -Dm644 "$app/profiles/camera/$notice" "$pkgdir/usr/share/licenses/$pkgname/camera-profiles/$notice"
+  done
+  install -Dm644 "$app/src/icons/LICENSE.lucide" "$pkgdir/usr/share/licenses/$pkgname/LICENSE.lucide"
+  install -Dm644 "$srcdir/darktable-$_dt/LICENSE" "$pkgdir/usr/share/licenses/$pkgname/LICENSE.darktable"
+  cp -a --no-preserve=ownership "$srcdir/engine-stage$_prefix/share/doc/darktable/." "$pkgdir/usr/share/licenses/$pkgname/darktable/"
+  local notice
+  for notice in rawspeed/LICENSE libxcf/LICENSE whereami/LICENSE.MIT whereami/LICENSE.WTFPLv2 LibRaw/LICENSE.LGPL LibRaw/LICENSE.CDDL OpenCL/LICENSE LibRaw-cmake/LICENSE; do
+    install -Dm644 "$srcdir/darktable-$_dt/src/external/$notice" "$pkgdir/usr/share/licenses/$pkgname/$notice"
+  done
+  install -Dm644 "$app/data/camera-database-NOTICE.txt" "$pkgdir/usr/share/licenses/$pkgname/rawspeed/CAMERA-DATA.txt"
+  sed -n '1,23p' "$srcdir/darktable-$_dt/src/external/LibRaw-cmake/CMakeLists.txt" > "$pkgdir/usr/share/licenses/$pkgname/LibRaw-cmake/NOTICE"
+  install -Dm644 "$app/data/film/DIGITAL-SOURCE.md" "$pkgdir/usr/share/licenses/$pkgname/film/DIGITAL-SOURCE.md"
+  for notice in NOTICE.md RIGHTS.md COLOUR-SOURCES.md COLOUR-SCIENCE-LICENSE.txt; do
+    install -Dm644 "$app/data/film/$notice" "$pkgdir/usr/share/licenses/$pkgname/film/$notice"
+  done
+  for notice in "$app"/data/film/*/SOURCE.md; do
+    install -Dm644 "$notice" "$pkgdir/usr/share/licenses/$pkgname/film/$(basename "$(dirname "$notice")")/SOURCE.md"
+  done
+  install -Dm644 "$app/pkgbuild/omaraw.svg" "$pkgdir/usr/share/icons/hicolor/scalable/apps/omaraw.svg"
+  install -Dm644 "$app/pkgbuild/omaraw.desktop" "$pkgdir/usr/share/applications/omaraw.desktop"
+  # The skill is part of the package; the install script links it as the user.
+  install -Dm644 "$app/skills/omaraw/SKILL.md" "$pkgdir/usr/share/omaraw/skills/omaraw/SKILL.md"
+  install -Dm644 "$app/gpu/LICENSE" "$pkgdir/usr/share/licenses/$pkgname/LICENSE.gpu"
+  install -Dm644 "$app/docs/GPU.md" "$pkgdir/usr/share/doc/$pkgname/GPU.md"
+  install -Dm644 "$app/docs/CREATIVE-PROFILES.md" "$pkgdir/usr/share/doc/$pkgname/CREATIVE-PROFILES.md"
+  install -Dm644 "$app/docs/CAMERA-PROFILES.md" "$pkgdir/usr/share/doc/$pkgname/CAMERA-PROFILES.md"
+  install -Dm644 "$app/docs/DNG-COMPATIBILITY.md" "$pkgdir/usr/share/doc/$pkgname/DNG-COMPATIBILITY.md"
+  install -Dm644 "$app/docs/cli.md" "$pkgdir/usr/share/doc/$pkgname/cli.md"
+  install -Dm644 "$app/docs/AI-DENOISE.md" "$pkgdir/usr/share/doc/$pkgname/AI-DENOISE.md"
+  install -Dm644 "$app/docs/AI-TOOLS.md" "$pkgdir/usr/share/doc/$pkgname/AI-TOOLS.md"
+  install -Dm644 "$app/docs/AUTO-TAGS.md" "$pkgdir/usr/share/doc/$pkgname/AUTO-TAGS.md"
+  # The user guide: the manual, and the same section-by-section pages the
+  # program shows under Help, readable without starting it.
+  install -d "$pkgdir/usr/share/doc/$pkgname"
+  python3 "$app/tools/build-user-guide.py" "$pkgdir/usr/share/doc/$pkgname/USER-GUIDE.md"
+  local page
+  for page in "$app"/src/help/*.md; do
+    install -Dm644 "$page" "$pkgdir/usr/share/doc/$pkgname/help/$(basename "$page")"
+  done
+  install -Dm644 "$app/docs/OFFLINE.md" "$pkgdir/usr/share/doc/$pkgname/OFFLINE.md"
+  install -Dm644 "$app/docs/COLOUR.md" "$pkgdir/usr/share/doc/$pkgname/COLOUR.md"
+  install -Dm644 "$app/docs/XMP-IMPORT.md" "$pkgdir/usr/share/doc/$pkgname/XMP-IMPORT.md"
+  install -Dm644 "$app/colour/oma-v1/config.ocio" "$pkgdir/usr/share/omaraw/colour/oma-v1/config.ocio"
+  install -Dm644 "$app/SOURCE-INFO" "$pkgdir/usr/share/doc/$pkgname/build-info"
+  printf 'darktable_revision=%s\n' "$_dt" >> "$pkgdir/usr/share/doc/$pkgname/build-info"
+  printf 'colour_contract=oma-colour-1\nengine_colour_adapter=1\n' >> "$pkgdir/usr/share/doc/$pkgname/build-info"
+  printf 'engine_patch_sha256=%s\n' "$(sha256sum "$app/patches/darktable-ocio.patch" | cut -d' ' -f1)" >> "$pkgdir/usr/share/doc/$pkgname/build-info"
+  printf 'engine_pipeline_patch_sha256=%s\n' "$(sha256sum "$app/patches/darktable-omaraw-pipeline.patch" | cut -d' ' -f1)" >> "$pkgdir/usr/share/doc/$pkgname/build-info"
+  printf 'engine_geometry_patch_sha256=%s\n' "$(sha256sum "$app/patches/darktable-omaraw-geometry.patch" | cut -d' ' -f1)" >> "$pkgdir/usr/share/doc/$pkgname/build-info"
+  printf 'engine_tools_patch_sha256=%s\n' "$(sha256sum "$app/patches/darktable-omaraw-tools.patch" | cut -d' ' -f1)" >> "$pkgdir/usr/share/doc/$pkgname/build-info"
+  printf 'engine_colour_consistency_patch_sha256=%s\n' "$(sha256sum "$app/patches/darktable-omaraw-colour-consistency.patch" | cut -d' ' -f1)" >> "$pkgdir/usr/share/doc/$pkgname/build-info"
+  printf 'engine_ai_calibration_patch_sha256=%s\n' "$(sha256sum "$app/patches/darktable-omaraw-ai-calibration.patch" | cut -d' ' -f1)" >> "$pkgdir/usr/share/doc/$pkgname/build-info"
+  printf 'engine_removal_dng_patch_sha256=%s\n' "$(sha256sum "$app/patches/darktable-omaraw-removal-dng.patch" | cut -d' ' -f1)" >> "$pkgdir/usr/share/doc/$pkgname/build-info"
+  printf 'engine_history_patch_sha256=%s\n' "$(sha256sum "$app/patches/darktable-omaraw-history.patch" | cut -d' ' -f1)" >> "$pkgdir/usr/share/doc/$pkgname/build-info"
+  printf 'engine_selective_colour_patch_sha256=%s\n' "$(sha256sum "$app/patches/darktable-omaraw-selective-colour.patch" | cut -d' ' -f1)" >> "$pkgdir/usr/share/doc/$pkgname/build-info"
+  printf 'engine_monochrome_patch_sha256=%s\n' "$(sha256sum "$app/patches/darktable-omaraw-monochrome.patch" | cut -d' ' -f1)" >> "$pkgdir/usr/share/doc/$pkgname/build-info"
+  printf 'engine_camera_profiles_patch_sha256=%s\n' "$(sha256sum "$app/patches/darktable-omaraw-camera-profiles.patch" | cut -d' ' -f1)" >> "$pkgdir/usr/share/doc/$pkgname/build-info"
+  printf 'engine_raw_fallback_patch_sha256=%s\n' "$(sha256sum "$app/patches/darktable-omaraw-raw-fallback.patch" | cut -d' ' -f1)" >> "$pkgdir/usr/share/doc/$pkgname/build-info"
+  printf 'engine_preview_alignment_patch_sha256=%s\n' "$(sha256sum "$app/patches/darktable-omaraw-preview-alignment.patch" | cut -d' ' -f1)" >> "$pkgdir/usr/share/doc/$pkgname/build-info"
+  printf 'libraw_r6iii_patch_sha256=%s\n' "$(sha256sum "$app/patches/libraw-omaraw-r6iii.patch" | cut -d' ' -f1)" >> "$pkgdir/usr/share/doc/$pkgname/build-info"
+  for notice in darktable-omaraw-creative-profile darktable-omaraw-enhanced-profile darktable-omaraw-dng-gain darktable-omaraw-colour-order darktable-omaraw-primaries darktable-omaraw-print-calibration darktable-omaraw-print-display darktable-omaraw-digital-film darktable-omaraw-workflow-restore rawspeed-omaraw-dng-jxl; do
+    printf '%s_sha256=%s\n' "$notice" "$(sha256sum "$app/patches/$notice.patch" | cut -d' ' -f1)" >> "$pkgdir/usr/share/doc/$pkgname/build-info"
+  done
+  printf 'rawspeed_arw6_patch_sha256=%s\n' "$(sha256sum "$app/patches/rawspeed-omaraw-arw6.patch" | cut -d' ' -f1)" >> "$pkgdir/usr/share/doc/$pkgname/build-info"
+}

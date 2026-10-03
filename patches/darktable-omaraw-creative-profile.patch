@@ -1,0 +1,54 @@
+--- a/src/iop/CMakeLists.txt
++++ b/src/iop/CMakeLists.txt
+@@ -150,6 +150,7 @@
+ add_iop(censorize "censorize.c")
+ add_iop(colorbalancergb "colorbalancergb.c")
+ add_iop(omarawgrade "omarawgrade.c")
++add_iop(omarawprofile "omarawprofile.c")
+ add_iop(omarawhalation "omarawhalation.c")
+ add_iop(omarawprint "omarawprint.c")
+ add_iop(cacorrectrgb "cacorrectrgb.c")
+--- a/src/common/iop_order.c
++++ b/src/common/iop_order.c
+@@ -163,5 +163,6 @@
+   { { 57.97f }, "omarawhalation", 0 },
+   { { 57.98f }, "omarawprint", 0 },
++  { { 57.99f }, "omarawprofile", 0 },
+   { {58.0f }, "colorout", 0},
+   { {59.0f }, "channelmixer", 0},
+   { {60.0f }, "soften", 0},
+@@ -293,5 +294,6 @@
+   { { 69.97f }, "omarawhalation", 0 },
+   { { 69.98f }, "omarawprint", 0 },
++  { { 69.99f }, "omarawprofile", 0 },
+   { {70.0f }, "colorout", 0},
+   { {71.0f }, "clahe", 0},
+   { {72.0f }, "finalscale", 0},
+@@ -418,5 +420,6 @@
+   { { 69.97f }, "omarawhalation", 0 },
+   { { 69.98f }, "omarawprint", 0 },
++  { { 69.99f }, "omarawprofile", 0 },
+   { {70.0f }, "colorout", 0},
+   { {71.0f }, "clahe", 0},
+   { {73.0f }, "overexposed", 0},
+@@ -544,5 +547,6 @@
+   { { 69.97f }, "omarawhalation", 0 },
+   { { 69.98f }, "omarawprint", 0 },
++  { { 69.99f }, "omarawprofile", 0 },
+   { { 70.0f }, "colorout", 0 },
+   { { 71.0f }, "clahe", 0 },
+   { { 72.0f }, "finalscale", 0 },
+@@ -672,5 +676,6 @@
+   { { 69.97f }, "omarawhalation", 0 },
+   { { 69.98f }, "omarawprint", 0 },
++  { { 69.99f }, "omarawprofile", 0 },
+   { { 70.0f }, "colorout", 0 },
+   { { 71.0f }, "clahe", 0 },
+   { { 73.0f }, "overexposed", 0 },
+@@ -768,5 +773,6 @@
+   _insert_before(iop_order_list, "colorout", "omarawhalation");
+   _insert_before(iop_order_list, "colorout", "omarawprint");
++  _insert_before(iop_order_list, "colorout", "omarawprofile");
+ }
+ 
+ static dt_iop_order_t _ioppr_get_default_iop_order_version(const dt_imgid_t imgid)

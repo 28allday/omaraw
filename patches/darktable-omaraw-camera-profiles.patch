@@ -1,0 +1,150 @@
+diff -ruN a/src/iop/omarawprint.c b/src/iop/omarawprint.c
+--- a/src/iop/omarawprint.c	2026-09-27 18:47:26.891254376 +0100
++++ b/src/iop/omarawprint.c	2026-09-27 18:47:26.891892005 +0100
+@@ -19,7 +19,7 @@
+ #include <stdlib.h>
+ #include <string.h>
+ 
+-DT_MODULE_INTROSPECTION(2, dt_iop_omarawprint_params_t)
++DT_MODULE_INTROSPECTION(3, dt_iop_omarawprint_params_t)
+ 
+ #define OMARAW_PRINT_STOCKS 22
+ static const char *const omaraw_print_stock_files[OMARAW_PRINT_STOCKS] = {
+@@ -59,6 +59,9 @@
+   OMARAW_PRINT_FINE_100 = 11,  // $DESCRIPTION: "Fine Grain 100"
+   OMARAW_PRINT_WARM_200 = 12,   // $DESCRIPTION: "Warm 200"
+   OMARAW_PRINT_VIVID_400 = 13, // $DESCRIPTION: "Vivid 400"
++  // A camera profile the person brought in, baked by OmaRAW into the same
++  // tables; its file is named by `profile`.
++  OMARAW_PRINT_CAMERA_PROFILE = 22, // $DESCRIPTION: "Camera profile"
+ } dt_iop_omarawprint_stock_t;
+ 
+ typedef enum dt_iop_omarawprint_white_t
+@@ -88,6 +91,7 @@
+   float gain_g;     // $MIN: 0.5 $MAX: 1.5 $DEFAULT: 1.0 $DESCRIPTION: "green density"
+   float gain_b;     // $MIN: 0.5 $MAX: 1.5 $DEFAULT: 1.0 $DESCRIPTION: "blue density"
+   int base_tone; // $MIN: -1 $MAX: 7 $DEFAULT: -1 $DESCRIPTION: "parked tone mappers"
++  char profile[1024]; // $DESCRIPTION: "camera profile tables"
+ } dt_iop_omarawprint_params_t;
+ 
+ // Older edits recover the enabled state immediately before the print came
+@@ -95,12 +99,18 @@
+ int legacy_params(dt_iop_module_t *self, const void *const old_params, const int old_version,
+                   void **new_params, int32_t *new_params_size, int *new_version)
+ {
+-  if(old_version != 1) return 1;
++  if(old_version != 1 && old_version != 2) return 1;
+   dt_iop_omarawprint_params_t *n = calloc(1, sizeof(*n));
+   if(!n) return 1;
+-  memcpy(n, old_params, offsetof(dt_iop_omarawprint_params_t, base_tone));
+-  n->base_tone = -1;
+-  *new_params = n; *new_params_size = sizeof(*n); *new_version = 2;
++  // Version 3 added the camera profile's file, empty for every older edit.
++  if(old_version == 1)
++  {
++    memcpy(n, old_params, offsetof(dt_iop_omarawprint_params_t, base_tone));
++    n->base_tone = -1;
++  }
++  else
++    memcpy(n, old_params, offsetof(dt_iop_omarawprint_params_t, profile));
++  *new_params = n; *new_params_size = sizeof(*n); *new_version = 3;
+   return 0;
+ }
+ 
+@@ -166,13 +176,58 @@
+   return t;
+ }
+ 
++static int _read_tables(const char *file, omaraw_print_tables_t *out);
+ static const omaraw_print_tables_t *_load_locked(int stock)
+ {
+   char datadir[PATH_MAX] = { 0 };
+   dt_loc_get_datadir(datadir, sizeof(datadir));
+   char *file = g_strdup_printf("%s/omaraw/print-stocks/%s.ompt", datadir, omaraw_print_stock_files[stock]);
++  const int ok = _read_tables(file, &g_tables[stock]);
++  g_free(file);
++  return ok ? &g_tables[stock] : NULL;
++}
++
++// A camera profile's tables, by file. OmaRAW names each bake after its
++// contents, so a file once read never changes: kept for the session, like
++// the stocks, and tried again a little later when it could not be read.
++static GHashTable *g_profiles;       // path -> omaraw_print_tables_t*
++static GHashTable *g_profile_failed; // path -> when it last could not be read
++static const omaraw_print_tables_t *_load_profile(const char *path)
++{
++  if(!path || !*path) return NULL;
++  g_mutex_lock(&g_load_lock);
++  if(!g_profiles)
++  {
++    g_profiles = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
++    g_profile_failed = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
++  }
++  const omaraw_print_tables_t *t = g_hash_table_lookup(g_profiles, path);
++  const gint64 *failed = t ? NULL : g_hash_table_lookup(g_profile_failed, path);
++  if(!t && (!failed || g_get_monotonic_time() - *failed > 2 * G_USEC_PER_SEC))
++  {
++    omaraw_print_tables_t *n = calloc(1, sizeof(*n));
++    if(n && _read_tables(path, n))
++    {
++      g_hash_table_insert(g_profiles, g_strdup(path), n);
++      g_hash_table_remove(g_profile_failed, path);
++      t = n;
++    }
++    else
++    {
++      free(n);
++      gint64 *when = g_new(gint64, 1);
++      *when = g_get_monotonic_time();
++      g_hash_table_insert(g_profile_failed, g_strdup(path), when);
++    }
++  }
++  g_mutex_unlock(&g_load_lock);
++  return t;
++}
++
++static int _read_tables(const char *file, omaraw_print_tables_t *out)
++{
+   FILE *f = g_fopen(file, "rb");
+-  if(!f) { dt_print(DT_DEBUG_ALWAYS, "[omarawprint] no tables at %s", file); g_free(file); return NULL; }
++  if(!f) { dt_print(DT_DEBUG_ALWAYS, "[omarawprint] no tables at %s", file); return 0; }
+   omaraw_print_tables_t t = { 0 };
+   char magic[4]; uint32_t head[3]; float consts[8];
+   int ok = fread(magic, 1, 4, f) == 4 && memcmp(magic, "OMPT", 4) == 0 && fread(head, 4, 3, f) == 3 && head[0] == 3
+@@ -183,16 +238,23 @@
+     t.size = head[1]; t.n = head[2];
+     t.grey = consts[0]; t.grey_log_e = consts[1]; t.nl_min = consts[2]; t.nl_max = consts[3];
+     t.nd_max = consts[4]; t.apd_max = consts[5]; t.d_max = consts[6]; t.ll_min = consts[7];
++    // Tables made outside the package (a camera profile) are held to the
++    // same shape: a span to divide by and an output range to scale into.
++    for(int i = 0; i < 8; i++) ok = ok && isfinite(consts[i]);
++    for(int i = 0; i < 9; i++) ok = ok && isfinite(t.m[i]);
++    ok = ok && t.grey > 0.0f && t.nl_max > t.nl_min && t.apd_max > 0.0f && t.ll_min < 0.0f;
++  }
++  if(ok)
++  {
+     const size_t cube = (size_t)t.size * t.size * t.size * 3, curves = (size_t)t.n * 3;
+     t.a2 = malloc(curves * 2); t.a3 = malloc(cube * 2); t.b1 = malloc(curves * 2); t.b2 = malloc(cube * 2);
+     ok = t.a2 && t.a3 && t.b1 && t.b2 && fread(t.a2, 2, curves, f) == curves && fread(t.a3, 2, cube, f) == cube
+          && fread(t.b1, 2, curves, f) == curves && fread(t.b2, 2, cube, f) == cube;
+   }
+   fclose(f);
+-  if(!ok) { free(t.a2); free(t.a3); free(t.b1); free(t.b2); dt_print(DT_DEBUG_ALWAYS, "[omarawprint] unreadable tables %s", file); g_free(file); return NULL; }
+-  g_free(file);
+-  g_tables[stock] = t;
+-  return &g_tables[stock];
++  if(!ok) { free(t.a2); free(t.a3); free(t.b1); free(t.b2); dt_print(DT_DEBUG_ALWAYS, "[omarawprint] unreadable tables %s", file); return 0; }
++  *out = t;
++  return 1;
+ }
+ 
+ static inline void _print(const omaraw_print_tables_t *t, const float trim[3], const float gain[3], const float p[3], float light[3]);
+@@ -202,7 +264,7 @@
+ {
+   const dt_iop_omarawprint_params_t *p = (const dt_iop_omarawprint_params_t *)params;
+   dt_iop_omarawprint_data_t *d = piece->data;
+-  d->tables = _load(p->stock);
++  d->tables = p->stock == OMARAW_PRINT_CAMERA_PROFILE ? _load_profile(p->profile) : _load(p->stock);
+   d->blend.strength = p->strength / 100.0f;
+   d->blend.base_tone = p->base_tone;
+   d->trim[0] = p->trim_r; d->trim[1] = p->trim_g; d->trim[2] = p->trim_b;

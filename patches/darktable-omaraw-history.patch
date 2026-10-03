@@ -1,0 +1,20 @@
+--- a/src/develop/develop.c
++++ b/src/develop/develop.c
+@@ -1442,6 +1442,17 @@
+   _dev_add_history_item_ext(dev, module, enable, FALSE, no_image, FALSE, TRUE);
+ }
+ 
++// OmaRAW: record the change as a step of its own. The merge test in
++// _dev_add_history_item_ext compares parameters only, so switching a module
++// on or off right after a step on that module was folded into that step
++// even when a new one was asked for.
++void dt_omaraw_add_history_item_new(dt_develop_t *dev,
++                                    dt_iop_module_t *module,
++                                    const gboolean enable)
++{
++  _dev_add_history_item_ext(dev, module, enable, TRUE, TRUE, FALSE, TRUE);
++}
++
+ static gboolean _dev_undo_start_record_target(dt_develop_t *dev, gpointer target)
+ {
+   const double this_time = dt_get_wtime();

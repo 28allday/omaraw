@@ -1,0 +1,423 @@
+diff -ruN a/src/common/iop_order.c b/src/common/iop_order.c
+--- a/src/common/iop_order.c	2026-09-18 12:50:06.360913779 +0100
++++ b/src/common/iop_order.c	2026-09-18 13:55:53.458607982 +0100
+@@ -162,5 +162,6 @@
+   { { 57.9f }, "omarawgrade", 0 },
+   { { 57.97f }, "omarawhalation", 0 },
++  { { 57.98f }, "omarawprint", 0 },
+   { {58.0f }, "colorout", 0},
+   { {59.0f }, "channelmixer", 0},
+   { {60.0f }, "soften", 0},
+@@ -291,5 +292,6 @@
+   { { 69.9f }, "omarawgrade", 0 },
+   { { 69.97f }, "omarawhalation", 0 },
++  { { 69.98f }, "omarawprint", 0 },
+   { {70.0f }, "colorout", 0},
+   { {71.0f }, "clahe", 0},
+   { {72.0f }, "finalscale", 0},
+@@ -415,5 +417,6 @@
+   { { 69.9f }, "omarawgrade", 0 },
+   { { 69.97f }, "omarawhalation", 0 },
++  { { 69.98f }, "omarawprint", 0 },
+   { {70.0f }, "colorout", 0},
+   { {71.0f }, "clahe", 0},
+   { {73.0f }, "overexposed", 0},
+@@ -540,5 +543,6 @@
+   { { 69.9f }, "omarawgrade", 0 },
+   { { 69.97f }, "omarawhalation", 0 },
++  { { 69.98f }, "omarawprint", 0 },
+   { { 70.0f }, "colorout", 0 },
+   { { 71.0f }, "clahe", 0 },
+   { { 72.0f }, "finalscale", 0 },
+@@ -667,5 +671,6 @@
+   { { 69.9f }, "omarawgrade", 0 },
+   { { 69.97f }, "omarawhalation", 0 },
++  { { 69.98f }, "omarawprint", 0 },
+   { { 70.0f }, "colorout", 0 },
+   { { 71.0f }, "clahe", 0 },
+   { { 73.0f }, "overexposed", 0 },
+@@ -762,5 +767,6 @@
+   _insert_before(iop_order_list, "colorout", "omarawgrade");
+   _insert_before(iop_order_list, "colorout", "omarawhalation");
++  _insert_before(iop_order_list, "colorout", "omarawprint");
+ }
+ 
+ static dt_iop_order_t _ioppr_get_default_iop_order_version(const dt_imgid_t imgid)
+diff -ruN a/src/iop/CMakeLists.txt b/src/iop/CMakeLists.txt
+--- a/src/iop/CMakeLists.txt	2026-09-18 12:50:06.359913713 +0100
++++ b/src/iop/CMakeLists.txt	2026-09-18 13:55:53.458607982 +0100
+@@ -152,5 +152,6 @@
+ add_iop(omarawgrade "omarawgrade.c")
+ add_iop(omarawhalation "omarawhalation.c")
++add_iop(omarawprint "omarawprint.c")
+ add_iop(cacorrectrgb "cacorrectrgb.c")
+ add_iop(diffuse "diffuse.c")
+ add_iop(blurs "blurs.c")
+diff -ruN a/src/iop/omarawprint.c b/src/iop/omarawprint.c
+--- a/src/iop/omarawprint.c	1970-01-01 01:00:00.000000000 +0100
++++ b/src/iop/omarawprint.c	2026-09-18 13:55:53.458607982 +0100
+@@ -0,0 +1,364 @@
++// SPDX-License-Identifier: GPL-3.0-or-later
++// OmaRAW print stock: the scene photographed on a colour negative, printed
++// on a release-print stock and projected, or on a still negative printed on
++// photographic paper, from tables baked out of the makers' data sheets
++// (docs/PRINT-STOCKS.md). Working RGB in, display-linear RGB out; the tone
++// mapper is off while a stock is chosen.
++//
++// Per pixel: log-shaped scene -> A (printing density) -> trim and gain per
++// layer -> B1 (the print's own curve, per layer) -> B2 (dyes, projector,
++// observer: screen light) -> blended with the untouched input by strength.
++#include "common/file_location.h"
++#include "common/iop_profile.h"
++#include "develop/imageop.h"
++#include "develop/imageop_math.h"
++#include "iop/iop_api.h"
++#include <math.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++
++DT_MODULE_INTROSPECTION(1, dt_iop_omarawprint_params_t)
++
++#define OMARAW_PRINT_STOCKS 22
++static const char *const omaraw_print_stock_files[OMARAW_PRINT_STOCKS] = {
++  "kodak-2383", "kodak-2393", "fuji-3510", "fuji-3513di", "fuji-3521xd", "fuji-3523xd", "agfa-cp30", "kodak-2302",
++  "kodak-portra-160-endura", "kodak-portra-400-endura", "kodak-portra-800-endura", "kodak-ektar-100-endura",
++  "kodak-gold-200-endura", "kodak-ultramax-400-endura",
++  "kodak-2383-v2", "kodak-2393-v2", "fuji-3510-v2", "fuji-3513di-v2", "fuji-3521xd-v2", "fuji-3523xd-v2",
++  "agfa-cp30-v2", "kodak-2302-v2"
++};
++
++typedef enum dt_iop_omarawprint_stock_t
++{
++  // The cinema prints' first tables, kept so photos printed on them keep
++  // their look; new work gets the second version below.
++  OMARAW_PRINT_CINEMA_2383 = 0,  // $DESCRIPTION: "Cinema 2383 (first version)"
++  OMARAW_PRINT_CINEMA_2393 = 1,  // $DESCRIPTION: "Cinema 2393 (first version)"
++  OMARAW_PRINT_CINEMA_3510 = 2,   // $DESCRIPTION: "Cinema 3510 (first version)"
++  OMARAW_PRINT_CINEMA_3513 = 3,   // $DESCRIPTION: "Cinema 3513DI (first version)"
++  OMARAW_PRINT_CINEMA_3521 = 4,   // $DESCRIPTION: "Cinema 3521XD (first version)"
++  OMARAW_PRINT_CINEMA_3523 = 5,   // $DESCRIPTION: "Cinema 3523XD (first version)"
++  OMARAW_PRINT_CINEMA_CP30 = 6,   // $DESCRIPTION: "Cinema CP30 (first version)"
++  OMARAW_PRINT_CINEMA_2302 = 7,  // $DESCRIPTION: "Cinema Mono 2302 (first version)"
++  // The cinema prints, second version: the negative's base counted once and
++  // no sensitivity beyond the spans the sheets draw (docs/PRINT-STOCKS.md, 12).
++  OMARAW_PRINT_CINEMA_2383_V2 = 14, // $DESCRIPTION: "Cinema 2383"
++  OMARAW_PRINT_CINEMA_2393_V2 = 15, // $DESCRIPTION: "Cinema 2393"
++  OMARAW_PRINT_CINEMA_3510_V2 = 16,  // $DESCRIPTION: "Cinema 3510"
++  OMARAW_PRINT_CINEMA_3513_V2 = 17,  // $DESCRIPTION: "Cinema 3513DI"
++  OMARAW_PRINT_CINEMA_3521_V2 = 18,  // $DESCRIPTION: "Cinema 3521XD"
++  OMARAW_PRINT_CINEMA_3523_V2 = 19,  // $DESCRIPTION: "Cinema 3523XD"
++  OMARAW_PRINT_CINEMA_CP30_V2 = 20,  // $DESCRIPTION: "Cinema CP30"
++  OMARAW_PRINT_CINEMA_2302_V2 = 21, // $DESCRIPTION: "Cinema Mono 2302"
++  // Still negatives on photographic paper: Portra on Portra Endura, the rest on Supra Endura.
++  OMARAW_PRINT_PORTRAIT_160 = 8,  // $DESCRIPTION: "Portrait 160"
++  OMARAW_PRINT_PORTRAIT_400 = 9,  // $DESCRIPTION: "Portrait 400"
++  OMARAW_PRINT_PORTRAIT_800 = 10, // $DESCRIPTION: "Portrait 800"
++  OMARAW_PRINT_FINE_100 = 11,  // $DESCRIPTION: "Fine Grain 100"
++  OMARAW_PRINT_WARM_200 = 12,   // $DESCRIPTION: "Warm 200"
++  OMARAW_PRINT_VIVID_400 = 13, // $DESCRIPTION: "Vivid 400"
++} dt_iop_omarawprint_stock_t;
++
++typedef enum dt_iop_omarawprint_white_t
++{
++  OMARAW_PRINT_WHITE_D65 = 0,  // $DESCRIPTION: "D65"
++  OMARAW_PRINT_WHITE_D60 = 1,  // $DESCRIPTION: "D60"
++  OMARAW_PRINT_WHITE_D55 = 2,  // $DESCRIPTION: "D55"
++  OMARAW_PRINT_WHITE_D50 = 3,  // $DESCRIPTION: "D50"
++} dt_iop_omarawprint_white_t;
++
++typedef enum dt_iop_omarawprint_paper_t
++{
++  OMARAW_PRINT_PAPER_PRINTED = 0,  // $DESCRIPTION: "printed white"
++  OMARAW_PRINT_PAPER_BASE = 1,     // $DESCRIPTION: "clear base"
++} dt_iop_omarawprint_paper_t;
++
++typedef struct dt_iop_omarawprint_params_t
++{
++  dt_iop_omarawprint_stock_t stock; // $DEFAULT: OMARAW_PRINT_CINEMA_2383_V2 $DESCRIPTION: "stock"
++  float strength;   // $MIN: 0.0 $MAX: 100.0 $DEFAULT: 100.0 $DESCRIPTION: "strength"
++  dt_iop_omarawprint_white_t white; // $DEFAULT: OMARAW_PRINT_WHITE_D65 $DESCRIPTION: "display white"
++  dt_iop_omarawprint_paper_t paper; // $DEFAULT: OMARAW_PRINT_PAPER_PRINTED $DESCRIPTION: "white"
++  float trim_r;     // $MIN: -1.0 $MAX: 1.0 $DEFAULT: 0.0 $DESCRIPTION: "red printer light"
++  float trim_g;     // $MIN: -1.0 $MAX: 1.0 $DEFAULT: 0.0 $DESCRIPTION: "green printer light"
++  float trim_b;     // $MIN: -1.0 $MAX: 1.0 $DEFAULT: 0.0 $DESCRIPTION: "blue printer light"
++  float gain_r;     // $MIN: 0.5 $MAX: 1.5 $DEFAULT: 1.0 $DESCRIPTION: "red density"
++  float gain_g;     // $MIN: 0.5 $MAX: 1.5 $DEFAULT: 1.0 $DESCRIPTION: "green density"
++  float gain_b;     // $MIN: 0.5 $MAX: 1.5 $DEFAULT: 1.0 $DESCRIPTION: "blue density"
++} dt_iop_omarawprint_params_t;
++
++// One stock's tables, as baked (OMPT version 3): a 3x3 to the negative's
++// layer exposures, then two 1-D curve sets and two size³ cubes, 16-bit,
++// red fastest (see tools/film/print_chain.py, bake_pair).
++typedef struct omaraw_print_tables_t
++{
++  int size, n;
++  float grey, grey_log_e, nl_min, nl_max, nd_max, apd_max, d_max, ll_min;
++  float m[9];
++  uint16_t *a2, *a3, *b1, *b2;
++} omaraw_print_tables_t;
++
++typedef struct dt_iop_omarawprint_data_t
++{
++  const omaraw_print_tables_t *tables;
++  float strength, trim[3], gain[3];
++  float white[9];   // linear Rec.2020 in -> out: a D65 white shown as the chosen white
++  float paper;      // light scale: 1 for the clear base as white, more for a printed white
++} dt_iop_omarawprint_data_t;
++
++// Bradford adaptation of a D65 white to D60, D55 and D50, in linear
++// Rec.2020 (rows: red, green, blue out), from tools/film/print_chain.py.
++static const float omaraw_print_white[4][9] = {
++  { 1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f },
++  { 1.015456f, 0.009470f, -0.001040f, 0.000528f, 0.995881f, 0.000904f, -0.000556f, 0.000716f, 0.924749f },
++  { 1.034200f, 0.021356f, -0.002189f, 0.001190f, 0.990055f, 0.001883f, -0.001179f, 0.001481f, 0.841856f },
++  { 1.057428f, 0.036658f, -0.003451f, 0.002041f, 0.981644f, 0.002926f, -0.001875f, 0.002281f, 0.751167f },
++};
++
++static omaraw_print_tables_t g_tables[OMARAW_PRINT_STOCKS];
++static int g_loaded[OMARAW_PRINT_STOCKS];
++static gint64 g_failed_at[OMARAW_PRINT_STOCKS];   // when a stock last could not be read
++
++const char *name() { return _("print stock"); }
++int default_group() { return IOP_GROUP_EFFECT | IOP_GROUP_EFFECTS; }
++int flags() { return IOP_FLAGS_INCLUDE_IN_STYLES | IOP_FLAGS_SUPPORTS_BLENDING | IOP_FLAGS_ALLOW_TILING | IOP_FLAGS_HIDDEN; }
++dt_iop_colorspace_type_t default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe,
++                                          dt_dev_pixelpipe_iop_t *piece) { return IOP_CS_RGB; }
++
++// Pipes commit on their own threads (preview, full, export): a stock is
++// read once, under a lock, and only marked loaded once its tables are in.
++static GMutex g_load_lock;
++
++static const omaraw_print_tables_t *_load_locked(int stock);
++static const omaraw_print_tables_t *_load(int stock)
++{
++  if(stock < 0 || stock >= OMARAW_PRINT_STOCKS) return NULL;
++  g_mutex_lock(&g_load_lock);
++  const omaraw_print_tables_t *t = NULL;
++  if(g_loaded[stock]) t = &g_tables[stock];
++  // A stock that could not be read (a package upgrade half-way, a missing
++  // file) is tried again a little later, not given up on until a restart.
++  else if(!g_failed_at[stock] || g_get_monotonic_time() - g_failed_at[stock] > 2 * G_USEC_PER_SEC)
++  {
++    t = _load_locked(stock);
++    g_loaded[stock] = t != NULL;
++    g_failed_at[stock] = t ? 0 : g_get_monotonic_time();
++  }
++  g_mutex_unlock(&g_load_lock);
++  return t;
++}
++
++static const omaraw_print_tables_t *_load_locked(int stock)
++{
++  char datadir[PATH_MAX] = { 0 };
++  dt_loc_get_datadir(datadir, sizeof(datadir));
++  char *file = g_strdup_printf("%s/omaraw/print-stocks/%s.ompt", datadir, omaraw_print_stock_files[stock]);
++  FILE *f = g_fopen(file, "rb");
++  if(!f) { dt_print(DT_DEBUG_ALWAYS, "[omarawprint] no tables at %s", file); g_free(file); return NULL; }
++  omaraw_print_tables_t t = { 0 };
++  char magic[4]; uint32_t head[3]; float consts[8];
++  int ok = fread(magic, 1, 4, f) == 4 && memcmp(magic, "OMPT", 4) == 0 && fread(head, 4, 3, f) == 3 && head[0] == 3
++           && head[1] >= 2 && head[1] <= 256 && head[2] >= 2 && head[2] <= 65536   // a cube and curves to interpolate in
++           && fread(consts, 4, 8, f) == 8 && fread(t.m, 4, 9, f) == 9;
++  if(ok)
++  {
++    t.size = head[1]; t.n = head[2];
++    t.grey = consts[0]; t.grey_log_e = consts[1]; t.nl_min = consts[2]; t.nl_max = consts[3];
++    t.nd_max = consts[4]; t.apd_max = consts[5]; t.d_max = consts[6]; t.ll_min = consts[7];
++    const size_t cube = (size_t)t.size * t.size * t.size * 3, curves = (size_t)t.n * 3;
++    t.a2 = malloc(curves * 2); t.a3 = malloc(cube * 2); t.b1 = malloc(curves * 2); t.b2 = malloc(cube * 2);
++    ok = t.a2 && t.a3 && t.b1 && t.b2 && fread(t.a2, 2, curves, f) == curves && fread(t.a3, 2, cube, f) == cube
++         && fread(t.b1, 2, curves, f) == curves && fread(t.b2, 2, cube, f) == cube;
++  }
++  fclose(f);
++  if(!ok) { free(t.a2); free(t.a3); free(t.b1); free(t.b2); dt_print(DT_DEBUG_ALWAYS, "[omarawprint] unreadable tables %s", file); g_free(file); return NULL; }
++  g_free(file);
++  g_tables[stock] = t;
++  return &g_tables[stock];
++}
++
++static inline void _print(const omaraw_print_tables_t *t, const float trim[3], const float gain[3], const float p[3], float light[3]);
++
++void commit_params(dt_iop_module_t *self, dt_iop_params_t *params, dt_dev_pixelpipe_t *pipe,
++                   dt_dev_pixelpipe_iop_t *piece)
++{
++  const dt_iop_omarawprint_params_t *p = (const dt_iop_omarawprint_params_t *)params;
++  dt_iop_omarawprint_data_t *d = piece->data;
++  d->tables = _load(p->stock);
++  d->strength = p->strength / 100.0f;
++  d->trim[0] = p->trim_r; d->trim[1] = p->trim_g; d->trim[2] = p->trim_b;
++  d->gain[0] = p->gain_r; d->gain[1] = p->gain_g; d->gain[2] = p->gain_b;
++  memcpy(d->white, omaraw_print_white[CLAMP((int)p->white, 0, 3)], sizeof(d->white));
++  // Printed white: a white card's print, not the clear base, is display
++  // white; measured from the tables so every stock's own paper tint stays.
++  d->paper = 1.0f;
++  if(d->tables && p->paper == OMARAW_PRINT_PAPER_PRINTED)
++  {
++    // Measured with neutral printer lights and densities: the white level
++    // belongs to the stock, so the lab's trims still move the print.
++    const float card[3] = { 0.9f, 0.9f, 0.9f }, none[3] = { 0.f, 0.f, 0.f }, unit[3] = { 1.f, 1.f, 1.f };
++    float light[3];
++    _print(d->tables, none, unit, card, light);
++    const float y = 0.2627f * light[0] + 0.6780f * light[1] + 0.0593f * light[2];
++    if(y > 1e-4f) d->paper = 1.0f / y;
++  }
++}
++
++// Trilinear sample of a size³ 16-bit table at t in 0..1, red fastest.
++static inline void _cube(const uint16_t *tab, int size, const float t[3], float out[3])
++{
++  float f[3]; int i[3];
++  for(int c = 0; c < 3; c++)
++  {
++    const float x = fminf(fmaxf(t[c], 0.0f), 1.0f) * (size - 1);
++    i[c] = (int)x; if(i[c] > size - 2) i[c] = size - 2; f[c] = x - i[c];
++  }
++  const float k = 1.0f / 65535.0f;
++  for(int c = 0; c < 3; c++)
++  {
++    float acc = 0.0f;
++    for(int db = 0; db < 2; db++) for(int dg = 0; dg < 2; dg++) for(int dr = 0; dr < 2; dr++)
++    {
++      const float w = (dr ? f[0] : 1 - f[0]) * (dg ? f[1] : 1 - f[1]) * (db ? f[2] : 1 - f[2]);
++      const size_t idx = (((size_t)(i[2] + db) * size + (i[1] + dg)) * size + (i[0] + dr)) * 3 + c;
++      acc += w * tab[idx];
++    }
++    out[c] = acc * k;
++  }
++}
++
++static inline float _curve(const uint16_t *curves, int n, int c, float u)
++{
++  const float x = fminf(fmaxf(u, 0.0f), 1.0f) * (n - 1);
++  int i = (int)x; if(i > n - 2) i = n - 2; const float f = x - i;
++  return (curves[i * 3 + c] * (1 - f) + curves[(i + 1) * 3 + c] * f) / 65535.0f;
++}
++
++// One pixel through the tables: scene-linear in, screen light out (as
++// projected, the clear base at 1.0), with the lab's trims and gains.
++static inline void _print(const omaraw_print_tables_t *t, const float trim[3], const float gain[3], const float p[3], float light[3])
++{
++  const float nl_span = t->nl_max - t->nl_min;
++  float nd[3], apd[3], pd[3], ll[3];
++  for(int c = 0; c < 3; c++)
++  {
++    const float e = fmaxf(p[0] * t->m[0 * 3 + c] + p[1] * t->m[1 * 3 + c] + p[2] * t->m[2 * 3 + c], 1e-6f);
++    nd[c] = _curve(t->a2, t->n, c, (log10f(e / t->grey) + t->grey_log_e - t->nl_min) / nl_span);
++  }
++  _cube(t->a3, t->size, nd, apd);
++  for(int c = 0; c < 3; c++) pd[c] = _curve(t->b1, t->n, c, (apd[c] * t->apd_max * gain[c] - trim[c]) / t->apd_max);
++  _cube(t->b2, t->size, pd, ll);
++  for(int c = 0; c < 3; c++) light[c] = exp2f(t->ll_min + ll[c] * -t->ll_min);
++}
++
++// Whether this instance has an item in the applied history: only then were
++// its settings committed to the pipe. A tone mapper the photo never had
++// (a JPEG, a PNG) is not the plain rendering, the input is.
++static gboolean _in_history(const dt_develop_t *dev, const dt_iop_module_t *m)
++{
++  int i = 0;
++  for(const GList *h = dev ? dev->history : NULL; h && i < dev->history_end; h = g_list_next(h), i++)
++    if(((const dt_dev_history_item_t *)h->data)->module == m) return TRUE;
++  return FALSE;
++}
++
++void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
++             void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
++{
++  const dt_iop_omarawprint_data_t *const d = piece->data;
++  const omaraw_print_tables_t *const t = d->tables;
++  const float *const in = (const float *)ivoid; float *const out = (float *)ovoid;
++  const size_t pixels = (size_t)roi_out->width * roi_out->height;
++  // Below full strength the print is blended with the plain rendering: the
++  // tone mapper the print parked, run on this same tile. Its settings stay
++  // committed in the pipe while it is off, so this is its own processing,
++  // not a copy of it; strength 0 is exactly the picture without a print,
++  // highlights rolled off, not the scene-linear input clipped.
++  float *plain = NULL;
++  if(t && d->strength < 1.0f)
++  {
++    dt_dev_pixelpipe_iop_t *mapper = NULL;
++    for(const char *const *op = (const char *const[]){ "sigmoid", "filmicrgb", NULL }; *op && !mapper; op++)
++      for(GList *n = piece->pipe->nodes; n; n = g_list_next(n))
++      {
++        dt_dev_pixelpipe_iop_t *other = n->data;
++        if(other->data && !other->enabled && dt_iop_module_is(other->module, *op)
++           && _in_history(self->dev, other->module)) { mapper = other; break; }
++      }
++    if(mapper && mapper->module->process)
++    {
++      plain = dt_alloc_align_float(pixels * 4);
++      if(plain)
++      {
++        // A parked piece is never run by the pipe, so it has no pixel
++        // format of its own yet: lend it this piece's, for this call.
++        const int colors = mapper->colors;
++        const dt_iop_buffer_dsc_t in_dsc = mapper->dsc_in, out_dsc = mapper->dsc_out;
++        mapper->colors = piece->colors; mapper->dsc_in = piece->dsc_in; mapper->dsc_out = piece->dsc_out;
++        mapper->module->process(mapper->module, mapper, ivoid, plain, roi_in, roi_out);
++        mapper->colors = colors; mapper->dsc_in = in_dsc; mapper->dsc_out = out_dsc;
++      }
++    }
++  }
++  const float *const base = plain ? plain : in;
++  if(!t || d->strength <= 0.0f)
++  {
++    memcpy(out, base, pixels * 4 * sizeof(float));
++    for(size_t k = 0; plain && k < pixels; k++) out[4 * k + 3] = in[4 * k + 3];
++    dt_free_align(plain);
++    return;
++  }
++  const float s = d->strength, paper = d->paper;
++  // The stock's measurements, its white matrix and paper weights are all in
++  // linear Rec. 2020. A pipe working in another space (the Working profile
++  // control, or an edit brought from elsewhere) is taken there and back, the
++  // way primary correction does, so the print does not depend on it.
++  float to2020[3][3] = {{1,0,0},{0,1,0},{0,0,1}}, from2020[3][3] = {{1,0,0},{0,1,0},{0,0,1}};
++  int convert = 0;
++  const dt_iop_order_iccprofile_info_t *const work = dt_ioppr_get_pipe_current_profile_info(self, piece->pipe);
++  const dt_iop_order_iccprofile_info_t *const rec2020
++      = dt_ioppr_add_profile_info_to_list(self->dev, DT_COLORSPACE_LIN_REC2020, "", DT_INTENT_PERCEPTUAL);
++  if(work && rec2020 && isfinite(work->matrix_in[0][0]) && isfinite(work->matrix_out[0][0])
++     && isfinite(rec2020->matrix_in[0][0]) && isfinite(rec2020->matrix_out[0][0]))
++  {
++    for(int r = 0; r < 3; r++)
++      for(int c = 0; c < 3; c++)
++      {
++        float a = 0.0f, b = 0.0f;
++        for(int k = 0; k < 3; k++)
++        {
++          a += rec2020->matrix_out[r][k] * work->matrix_in[k][c];   // work -> XYZ (D50) -> Rec. 2020
++          b += work->matrix_out[r][k] * rec2020->matrix_in[k][c];   // and back
++        }
++        to2020[r][c] = a; from2020[r][c] = b;
++        if(fabsf(a - (r == c ? 1.0f : 0.0f)) > 1e-4f) convert = 1;
++      }
++  }
++  DT_OMP_FOR()
++  for(size_t k = 0; k < pixels; k++)
++  {
++    const float *p = in + 4 * k; float *q = out + 4 * k;
++    float light[3], shown[3], p2020[3], back[3];
++    for(int c = 0; c < 3; c++)
++      p2020[c] = convert ? to2020[c][0] * p[0] + to2020[c][1] * p[1] + to2020[c][2] * p[2] : p[c];
++    _print(t, d->trim, d->gain, p2020, light);
++    for(int c = 0; c < 3; c++) light[c] *= paper;
++    for(int c = 0; c < 3; c++) shown[c] = d->white[c * 3 + 0] * light[0] + d->white[c * 3 + 1] * light[1] + d->white[c * 3 + 2] * light[2];
++    for(int c = 0; c < 3; c++)
++      back[c] = convert ? from2020[c][0] * shown[0] + from2020[c][1] * shown[1] + from2020[c][2] * shown[2] : shown[c];
++    const float *const b = base + 4 * k;
++    for(int c = 0; c < 3; c++) q[c] = b[c] + s * (back[c] - b[c]);
++    q[3] = p[3];
++  }
++  dt_free_align(plain);
++}
++
++void init_pipe(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
++{
++  piece->data = calloc(1, sizeof(dt_iop_omarawprint_data_t));
++}
++void cleanup_pipe(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
++{
++  free(piece->data); piece->data = NULL;
++}

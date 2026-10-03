@@ -1,0 +1,28 @@
+--- a/src/iop/bloom.c	2026-09-21 11:59:29.155835533 +0100
++++ b/src/iop/bloom.c	2026-09-21 11:59:29.165212381 +0100
+@@ -157,7 +157,12 @@
+   DT_OMP_FOR()
+   for(size_t k = 0; k < npixels; k++)
+   {
+-    out[4*k+0] = 100.0f - (((100.0f - in[4*k]) * (100.0f - blurlightness[k])) / 100.0f); // Screen blend
++    // OmaRAW: the screen blend written as L + glow*(1 - L/100), with the glow
++    // capped at white and no weight at or above it. Identical for L and glow
++    // up to 100; past white (scene light, under a print stock) the plain
++    // formula went negative and darkened, even inverted, the brightest tones.
++    const float L = in[4*k], glow = fminf(blurlightness[k], 100.0f);
++    out[4*k+0] = L + glow * fmaxf(0.0f, 1.0f - L / 100.0f); // Screen blend
+     out[4*k+1] = in[4*k+1];
+     out[4*k+2] = in[4*k+2];
+     out[4*k+3] = in[4*k+3];
+--- a/data/kernels/bloom.cl	2026-09-21 11:59:29.156494733 +0100
++++ b/data/kernels/bloom.cl	2026-09-21 11:59:29.166199057 +0100
+@@ -154,7 +154,8 @@
+   float4 pixel  = read_imagef(in_a, sampleri, (int2)(x, y));
+   float processed = read_imagef(in_b, sampleri, (int2)(x, y)).x;
+ 
+-  pixel.x = 100.0f-(((100.0f-pixel.x)*(100.0f-processed))/100.0f); // Screen blend
++  // OmaRAW: as the CPU path — glow capped at white, no weight at or above it.
++  pixel.x = pixel.x + fmin(processed, 100.0f) * fmax(0.0f, 1.0f - pixel.x / 100.0f); // Screen blend
+ 
+   write_imagef (out, (int2)(x, y), pixel);
+ }

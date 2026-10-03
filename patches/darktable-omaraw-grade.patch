@@ -1,0 +1,426 @@
+--- a/src/common/omaraw_grade.h
++++ b/src/common/omaraw_grade.h
+@@ -0,0 +1,130 @@
++// SPDX-License-Identifier: GPL-3.0-or-later
++// OmaRAW primary correction. The RGB pipeline stays linear; LGG is evaluated
++// in a signed gamma-2.2 working-RGB encoding after tone mapping. No [0,1] clamp
++// is applied, so negative values and highlight headroom survive the grade.
++#pragma once
++#include <math.h>
++#include <float.h>
++#include <string.h>
++
++typedef struct oma_grade_coefficients
++{
++  float lift[3], gamma[3], gain[3], offset[3];
++  int identity;
++  // Lum Mix: 1 (100, the default) lets a colour push change
++  // brightness too; lower holds the pixel's linear luminance towards what
++  // the master levels alone give, so the pucks move colour only. master is
++  // Lift, Gamma, Gain, Offset levels without their tint; luma the working
++  // space's Y row.
++  float master[4], lum_mix, luma[3];
++} oma_grade_coefficients;
++
++static inline float oma_grade_bound(float x, float low, float high, float neutral)
++{
++  return isfinite(x) ? fmaxf(low, fminf(high, x)) : neutral;
++}
++
++// Conventional hue: red 0, green 120, blue 240 degrees. Remove the grey
++// component so the colour puck and master level are independent controls:
++// "grey" is the working space's own luminance, so a tint changes colour and
++// not brightness. luma is that space's Y row; Rec. 2020, the default
++// working space, when none is given.
++static inline void oma_grade_tint_luma(float hue, float chroma, const float luma[3], float rgb[3])
++{
++  hue = isfinite(hue) ? fmodf(fmodf(hue, 360.f) + 360.f, 360.f) / 60.f : 0.f;
++  const float x = 1.f - fabsf(fmodf(hue, 2.f) - 1.f);
++  const int sector = (int)hue;
++  const float colours[6][3] = {{1,x,0},{x,1,0},{0,1,x},{0,x,1},{x,0,1},{1,0,x}};
++  const float *colour = colours[sector];
++  const float grey = luma[0]*colour[0] + luma[1]*colour[1] + luma[2]*colour[2];
++  float peak = 0.f;
++  for(int c=0;c<3;c++) peak = fmaxf(peak, fabsf(colour[c]-grey));
++  for(int c=0;c<3;c++) rgb[c] = chroma*(colour[c]-grey)/peak;
++}
++
++static const float oma_grade_rec2020_luma[3] = {.2627f, .6780f, .0593f};
++
++// Inputs are hue/chroma/master for Lift, Gamma, Gain and Offset.
++// Neutral master values: 0, 1, 1, 0. Gamma/Gain colour offsets are multiplicative
++// in stops, ensuring positive factors and monotonic transfer curves.
++static inline void oma_grade_prepare_mix(oma_grade_coefficients *d, const float controls[4][3], const float luma[3],
++                                         float lum_mix)
++{
++  float tint[4][3], level[4];
++  const float lows[4] = {-.5f,.25f,0.f,-1.f};
++  const float highs[4] = {.5f,4.f,4.f,1.f};
++  const float defaults[4] = {0.f,1.f,1.f,0.f};
++  d->identity = 1;
++  for(int i=0;i<4;i++)
++  {
++    const float chroma = oma_grade_bound(controls[i][1],0.f,(i==0||i==3)?.25f:1.f,0.f);
++    level[i] = oma_grade_bound(controls[i][2],lows[i],highs[i],defaults[i]);
++    oma_grade_tint_luma(controls[i][0],chroma,luma,tint[i]);
++    d->identity &= chroma == 0.f && level[i] == defaults[i];
++  }
++  for(int c=0;c<3;c++)
++  {
++    d->lift[c] = level[0] + tint[0][c];
++    d->gamma[c] = level[1] * exp2f(tint[1][c]);
++    d->gain[c] = level[2] * exp2f(tint[2][c]);
++    d->offset[c] = level[3] + tint[3][c];
++    d->luma[c] = luma[c];
++  }
++  for(int i=0;i<4;i++) d->master[i] = level[i];
++  d->lum_mix = oma_grade_bound(lum_mix,0.f,1.f,1.f);
++}
++
++static inline void oma_grade_prepare_luma(oma_grade_coefficients *d, const float controls[4][3], const float luma[3])
++{
++  oma_grade_prepare_mix(d, controls, luma, 1.f);
++}
++
++static inline void oma_grade_prepare(oma_grade_coefficients *d, const float controls[4][3])
++{
++  oma_grade_prepare_luma(d, controls, oma_grade_rec2020_luma);
++}
++
++static inline float oma_grade_signed_power(float x, float power)
++{
++  // Keep extreme finite HDR input from overflowing the float pipeline.
++  // This is a numeric guard far beyond display white, not a [0,1] clamp.
++  return copysignf(fminf(powf(fabsf(x),power),FLT_MAX/64.f),x);
++}
++
++static inline float oma_grade_channel(float x, float lift, float gamma, float gain, float offset)
++{
++  const float encoded = oma_grade_signed_power(x,1.f/2.2f);
++  const float lifted = encoded + lift*fmaxf(0.f,1.f-encoded);
++  const float graded = oma_grade_signed_power(lifted*gain,1.f/gamma) + offset;
++  return oma_grade_signed_power(graded,2.2f);
++}
++
++// The luminance Lum Mix keeps: the master-only grade's, mixed towards the
++// full grade's. Only a positive luminance is rescaled; a colour at or below
++// black keeps the full grade. So does an impossible colour whose channels
++// of opposite sign all but cancel (luminance under 1% of its largest
++// channel, fading in by 3%): dividing by that luminance would only magnify
++// noise. Every real colour is above it; pure blue is at 5.9%.
++static inline float oma_grade_lum_scale(const oma_grade_coefficients *d, const float in[4], const float out[3])
++{
++  float base = 0.f, full = 0.f, peak = 0.f;
++  for(int c=0;c<3;c++)
++  {
++    base += d->luma[c]*oma_grade_channel(in[c],d->master[0],d->master[1],d->master[2],d->master[3]);
++    full += d->luma[c]*out[c];
++    peak = fmaxf(peak, fabsf(out[c]));
++  }
++  if(!(full > 1e-6f) || !(base >= 0.f)) return 1.f;
++  const float weight = fminf(1.f, fmaxf(0.f, (full/peak - .01f)/.02f));
++  return 1.f + weight*((base + d->lum_mix*(full - base))/full - 1.f);
++}
++
++static inline void oma_grade_pixel(const oma_grade_coefficients *d, const float in[4], float out[4])
++{
++  if(d->identity) { memcpy(out,in,4*sizeof(float)); return; }
++  float rgb[3];
++  for(int c=0;c<3;c++) rgb[c] = oma_grade_channel(in[c],d->lift[c],d->gamma[c],d->gain[c],d->offset[c]);
++  const float scale = d->lum_mix < 1.f ? oma_grade_lum_scale(d,in,rgb) : 1.f;
++  for(int c=0;c<3;c++) out[c] = rgb[c]*scale;
++  out[3] = in[3];
++}
+--- a/src/iop/omarawgrade.c
++++ b/src/iop/omarawgrade.c
+@@ -0,0 +1,171 @@
++// SPDX-License-Identifier: GPL-3.0-or-later
++// OmaRAW Lift/Gamma/Gain/Offset, independent of older colour-balance edits.
++#include "common/iop_profile.h"
++#include "common/omaraw_grade.h"
++#include "common/omaraw_chain.h"
++#include "develop/imageop.h"
++#include "develop/imageop_math.h"
++#include "iop/iop_api.h"
++#include <stdlib.h>
++
++DT_MODULE_INTROSPECTION(2, dt_iop_omarawgrade_params_t)
++
++typedef struct dt_iop_omarawgrade_params_t
++{
++  float lift_H; // $MIN: 0.0 $MAX: 360.0 $DEFAULT: 0.0 $DESCRIPTION: "lift hue"
++  float lift_C; // $MIN: 0.0 $MAX: 0.25 $DEFAULT: 0.0 $DESCRIPTION: "lift chroma"
++  float lift_Y; // $MIN: -0.5 $MAX: 0.5 $DEFAULT: 0.0 $DESCRIPTION: "lift level"
++  float gamma_H; // $MIN: 0.0 $MAX: 360.0 $DEFAULT: 0.0 $DESCRIPTION: "gamma hue"
++  float gamma_C; // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.0 $DESCRIPTION: "gamma chroma"
++  float gamma_Y; // $MIN: 0.25 $MAX: 4.0 $DEFAULT: 1.0 $DESCRIPTION: "gamma level"
++  float gain_H; // $MIN: 0.0 $MAX: 360.0 $DEFAULT: 0.0 $DESCRIPTION: "gain hue"
++  float gain_C; // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.0 $DESCRIPTION: "gain chroma"
++  float gain_Y; // $MIN: 0.0 $MAX: 4.0 $DEFAULT: 1.0 $DESCRIPTION: "gain level"
++  float offset_H; // $MIN: 0.0 $MAX: 360.0 $DEFAULT: 0.0 $DESCRIPTION: "offset hue"
++  float offset_C; // $MIN: 0.0 $MAX: 0.25 $DEFAULT: 0.0 $DESCRIPTION: "offset chroma"
++  float offset_Y; // $MIN: -1.0 $MAX: 1.0 $DEFAULT: 0.0 $DESCRIPTION: "offset level"
++  float lum_mix; // $MIN: 0.0 $MAX: 100.0 $DEFAULT: 100.0 $DESCRIPTION: "lum mix"
++} dt_iop_omarawgrade_params_t;
++
++// Version 1 had no Lum Mix: its colour pushes always moved brightness too,
++// which is Lum Mix 100.
++int legacy_params(dt_iop_module_t *self, const void *const old_params, const int old_version,
++                  void **new_params, int32_t *new_params_size, int *new_version)
++{
++  if(old_version != 1) return 1;
++  dt_iop_omarawgrade_params_t *n = calloc(1, sizeof(dt_iop_omarawgrade_params_t));
++  memcpy(n, old_params, 12 * sizeof(float));
++  n->lum_mix = 100.f;
++  *new_params = n;
++  *new_params_size = sizeof(dt_iop_omarawgrade_params_t);
++  *new_version = 2;
++  return 0;
++}
++
++const char *name() { return _("primary colour correction"); }
++int default_group() { return IOP_GROUP_COLOR | IOP_GROUP_GRADING; }
++int flags() { return IOP_FLAGS_INCLUDE_IN_STYLES | IOP_FLAGS_SUPPORTS_BLENDING | IOP_FLAGS_ALLOW_TILING | IOP_FLAGS_HIDDEN; }
++dt_iop_colorspace_type_t default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe,
++                                          dt_dev_pixelpipe_iop_t *piece) { return IOP_CS_RGB; }
++
++// The coefficients, and how to reach Rec. 2020 from the pipe's working
++// space. The wheels grade in linear Rec. 2020 (D65 luminance) whatever the
++// working profile, as the print does, so the same wheels give
++// the same colours; the conversion is only known once the pipe runs.
++typedef struct dt_iop_omarawgrade_data_t
++{
++  oma_grade_coefficients coefficients;   // first, so the data reads as the coefficients
++  float controls[4][3];
++  float lum_mix;
++  int convert;                           // the working space is not linear Rec. 2020
++  float to2020[3][3], from2020[3][3];
++} dt_iop_omarawgrade_data_t;
++
++void commit_params(dt_iop_module_t *self, dt_iop_params_t *params, dt_dev_pixelpipe_t *pipe,
++                   dt_dev_pixelpipe_iop_t *piece)
++{
++  const dt_iop_omarawgrade_params_t *p = (const dt_iop_omarawgrade_params_t *)params;
++  dt_iop_omarawgrade_data_t *data = piece->data;
++  const float controls[4][3] = {
++    {p->lift_H,p->lift_C,p->lift_Y}, {p->gamma_H,p->gamma_C,p->gamma_Y},
++    {p->gain_H,p->gain_C,p->gain_Y}, {p->offset_H,p->offset_C,p->offset_Y}};
++  memcpy(data->controls, controls, sizeof controls);
++  data->lum_mix = p->lum_mix / 100.f;
++  oma_grade_prepare_mix(&data->coefficients,controls,oma_grade_rec2020_luma,data->lum_mix);
++}
++
++// The way from this pipe's working space to linear Rec. 2020 and back
++// (through the D50 connection space), or none when it already is.
++static void _resolve(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece)
++{
++  dt_iop_omarawgrade_data_t *data = piece->data;
++  data->convert = 0;
++  const dt_iop_order_iccprofile_info_t *const work = dt_ioppr_get_pipe_current_profile_info(self, piece->pipe);
++  const dt_iop_order_iccprofile_info_t *const rec2020
++      = dt_ioppr_add_profile_info_to_list(self->dev, DT_COLORSPACE_LIN_REC2020, "", DT_INTENT_PERCEPTUAL);
++  if(!work || !rec2020 || work == rec2020 || !isfinite(work->matrix_in[0][0]) || !isfinite(work->matrix_out[0][0])
++     || !isfinite(rec2020->matrix_in[0][0]) || !isfinite(rec2020->matrix_out[0][0]))
++    return;
++  float identity = 0.f;
++  for(int r = 0; r < 3; r++)
++    for(int c = 0; c < 3; c++)
++    {
++      float a = 0.f, b = 0.f;
++      for(int k = 0; k < 3; k++)
++      {
++        a += rec2020->matrix_out[r][k] * work->matrix_in[k][c];   // work -> XYZ (D50) -> Rec. 2020
++        b += work->matrix_out[r][k] * rec2020->matrix_in[k][c];   // and back
++      }
++      data->to2020[r][c] = a; data->from2020[r][c] = b;
++      identity = fmaxf(identity, fabsf(a - (r == c ? 1.f : 0.f)));
++    }
++  data->convert = identity > 1e-5f;
++}
++
++void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const input,
++             void *const output, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
++{
++  _resolve(self, piece);
++  const dt_iop_omarawgrade_data_t *data = piece->data;
++  const oma_grade_coefficients *d = &data->coefficients;
++  const float *in = input;
++  float *out = output;
++  const size_t pixels = (size_t)roi_out->width * roi_out->height;
++  if(d->identity) { memcpy(out,in,pixels*4*sizeof(float)); return; }
++  if(!data->convert)
++  {
++    DT_OMP_FOR()
++    for(size_t k=0;k<pixels;k++) oma_grade_pixel(d,in+4*k,out+4*k);
++    return;
++  }
++  DT_OMP_FOR()
++  for(size_t k=0;k<pixels;k++)
++  {
++    const float *p = in + 4*k;
++    float a[4], b[4];
++    for(int r=0;r<3;r++) a[r] = data->to2020[r][0]*p[0] + data->to2020[r][1]*p[1] + data->to2020[r][2]*p[2];
++    a[3] = p[3];
++    oma_grade_pixel(d,a,b);
++    for(int r=0;r<3;r++) out[4*k+r] = data->from2020[r][0]*b[0] + data->from2020[r][1]*b[1] + data->from2020[r][2]*b[2];
++    out[4*k+3] = p[3];
++  }
++}
++
++void init_pipe(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
++{
++  piece->data = calloc(1,sizeof(dt_iop_omarawgrade_data_t));
++}
++void cleanup_pipe(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
++{
++  free(piece->data); piece->data = NULL;
++}
++
++// Describe the exact committed coefficients, including the master levels.
++// Masks and blending are excluded by the engine's chain eligibility check.
++int omaraw_chain_describe(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
++                          dt_omaraw_chain_stage_t *stage)
++{
++  _resolve(self, piece);
++  // The fused pass grades the pipe's own RGB: offer it only when that is
++  // Rec. 2020; another working space takes the native path, which converts.
++  if(((const dt_iop_omarawgrade_data_t *)piece->data)->convert) return 0;
++  const oma_grade_coefficients *d = &((const dt_iop_omarawgrade_data_t *)piece->data)->coefficients;
++  memset(stage,0,sizeof(*stage));
++  stage->kind = DT_OMARAW_CHAIN_PRIMARY_GRADE;
++  for(int c=0;c<3;c++)
++  {
++    stage->illuminant[c] = d->lift[c];
++    stage->saturation[c] = d->gamma[c];
++    stage->lightness[c] = d->gain[c];
++    stage->grey[c] = d->offset[c];
++    stage->mix[c] = d->luma[c];
++  }
++  // The fourth of each is that wheel's master level alone, and mix[3] the
++  // Lum Mix, for the luminance it holds.
++  stage->illuminant[3] = d->master[0];
++  stage->saturation[3] = d->master[1];
++  stage->lightness[3] = d->master[2];
++  stage->grey[3] = d->master[3];
++  stage->mix[3] = d->lum_mix;
++  return 1;
++}
+--- a/src/iop/CMakeLists.txt
++++ b/src/iop/CMakeLists.txt
+@@ -149,6 +149,7 @@
+ add_iop(channelmixerrgb "channelmixerrgb.c" "../chart/common.c")
+ add_iop(censorize "censorize.c")
+ add_iop(colorbalancergb "colorbalancergb.c")
++add_iop(omarawgrade "omarawgrade.c")
+ add_iop(cacorrectrgb "cacorrectrgb.c")
+ add_iop(diffuse "diffuse.c")
+ add_iop(blurs "blurs.c")
+--- a/src/common/iop_order.c
++++ b/src/common/iop_order.c
+@@ -159,6 +159,7 @@
+   { {56.0f }, "grain", 0},
+   { {56.5f }, "lut3d", 0},
+   { {57.0f }, "colorcontrast", 0},
++  { { 57.9f }, "omarawgrade", 0 },
+   { {58.0f }, "colorout", 0},
+   { {59.0f }, "channelmixer", 0},
+   { {60.0f }, "soften", 0},
+@@ -285,6 +286,7 @@
+   { {67.0f }, "splittoning", 0},     // creative module
+   { {68.0f }, "vignette", 0},        // creative module
+   { {69.0f }, "colorreconstruct", 0},// try to salvage blown areas before ICC intents in LittleCMS2 do things with them.
++  { { 69.9f }, "omarawgrade", 0 },
+   { {70.0f }, "colorout", 0},
+   { {71.0f }, "clahe", 0},
+   { {72.0f }, "finalscale", 0},
+@@ -406,6 +408,7 @@
+   { {68.0f }, "vignette", 0},        // creative module
+   { {69.0f }, "colorreconstruct", 0},// try to salvage blown areas before ICC intents in LittleCMS2 do things with them.
+   { {69.4f }, "finalscale", 0},
++  { { 69.9f }, "omarawgrade", 0 },
+   { {70.0f }, "colorout", 0},
+   { {71.0f }, "clahe", 0},
+   { {73.0f }, "overexposed", 0},
+@@ -528,6 +531,7 @@
+   { { 68.0f }, "vignette", 0 },         // creative module
+   { { 69.0f }, "colorreconstruct", 0 }, // try to salvage blown areas before ICC intents in LittleCMS2 do things
+                                         // with them.
++  { { 69.9f }, "omarawgrade", 0 },
+   { { 70.0f }, "colorout", 0 },
+   { { 71.0f }, "clahe", 0 },
+   { { 72.0f }, "finalscale", 0 },
+@@ -652,6 +656,7 @@
+   { { 69.0f }, "colorreconstruct", 0 }, // try to salvage blown areas before ICC intents in LittleCMS2 do things
+                                         // with them.
+   { { 69.5f }, "finalscale", 0 },
++  { { 69.9f }, "omarawgrade", 0 },
+   { { 70.0f }, "colorout", 0 },
+   { { 71.0f }, "clahe", 0 },
+   { { 73.0f }, "overexposed", 0 },
+@@ -744,6 +749,7 @@
+   _insert_before(iop_order_list, "colorbalancergb", "colorequal");
+   _insert_before(iop_order_list, "highlights", "rasterfile");
+   _insert_before(iop_order_list, "colorbalance", "colorharmonizer");
++  _insert_before(iop_order_list, "colorout", "omarawgrade");
+ }
+ 
+ static dt_iop_order_t _ioppr_get_default_iop_order_version(const dt_imgid_t imgid)
+--- a/src/common/omaraw_chain.h
++++ b/src/common/omaraw_chain.h
+@@ -15,7 +15,8 @@
+   DT_OMARAW_CHAIN_COLORIN = 2,
+   DT_OMARAW_CHAIN_LAB_TO_RGB = 3,
+   DT_OMARAW_CHAIN_CHANNELMIXER = 4,
+-  DT_OMARAW_CHAIN_SIGMOID = 5
++  DT_OMARAW_CHAIN_SIGMOID = 5,
++  DT_OMARAW_CHAIN_PRIMARY_GRADE = 6
+ };
+ 
+ // Every matrix is row-major 3x4 with the fourth column unused, as the
+@@ -38,6 +39,7 @@
+   // channelmixer: darktable's channelmixerrgb kernels, argument for argument
+   int adaptation, version, clip, apply_grey;
+   float rgb_to_xyz[12], xyz_to_rgb[12], mix[12];
++  // PRIMARY_GRADE uses these four RGB vectors as Lift, Gamma, Gain, Offset.
+   float illuminant[4], saturation[4], lightness[4], grey[4];
+   float p, gamut;
+   // sigmoid: method 0 per channel (with the three primaries matrices),
+--- a/src/develop/pixelpipe_hb.c
++++ b/src/develop/pixelpipe_hb.c
+@@ -1984,7 +1984,7 @@
+ {
+   const char *op = module->op;
+   if(strcmp(op, "exposure") && strcmp(op, "colorin")
+-     && strcmp(op, "channelmixerrgb") && strcmp(op, "sigmoid"))
++     && strcmp(op, "channelmixerrgb") && strcmp(op, "sigmoid") && strcmp(op, "omarawgrade"))
+     return FALSE;
+   const dt_develop_blend_params_t *blend = piece->blendop_data;
+   if(blend && blend->mask_mode != DEVELOP_MASK_DISABLED) return FALSE;
+@@ -2092,6 +2092,11 @@
+     dt_dev_pixelpipe_iop_t *pie = pc->data;
+     if(_skip_piece_on_tags(pie)) continue;
+     if(!_omaraw_chain_candidate(m->data, pie)) break;
++    // Primary wheels change continuously. Keep their input as a cache
++    // boundary so a new puck position can reuse the upstream colour chain.
++    // Otherwise each CPU qualification would redo unchanged colour stages.
++    if(count && (!strcmp(((dt_iop_module_t *)first_modules->data)->op, "omarawgrade")
++                 || !strcmp(((dt_iop_module_t *)m->data)->op, "omarawgrade"))) break;
+     first_modules = m; first_pieces = pc; ++count;
+     if(count >= OMARAW_CHAIN_MAX) break;
+   }
+@@ -2172,10 +2177,14 @@
+                     dt_dev_pixelpipe_type_to_str(pipe->type), module->op, n);
+     return 1;
+   }
++  // GPU admission needs an unconditional timer. dt_get_perf_times only
++  // initializes its clock when debug performance logging is enabled.
++  // Exclude the declined GPU attempt/initialization from the native cost.
++  const gint64 native_started = g_get_monotonic_time();
+   if(_omaraw_chain_native(pipe, first_modules, first_pieces, modules, (const float *)input,
+                           (float *)*output, &roi_in, roi_out, work_profile, n))
+     return -1;
+-  const double native_ms = dt_get_lap_time(&start.clock) * 1000.0;
++  const double native_ms = (g_get_monotonic_time() - native_started) / 1000.0;
+   dt_omaraw_chain(stages, n, (const float *)input, (float *)*output, w, h, native_ms,
+                   _omaraw_chain_cancelled, pipe);
+   return _pipe_has_shutdown(pipe) ? -1 : 1;

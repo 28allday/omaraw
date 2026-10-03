@@ -1,0 +1,21 @@
+--- a/src/develop/develop.c
++++ b/src/develop/develop.c
+@@ -2019,13 +2019,16 @@
+             // it is important to recover temperature in this case
+             // (modern chroma and not module present as we need to
+             // have the pre 3.0 default parameters used.
+-            const gchar *current_workflow =
+-              dt_conf_get_string_const("plugins/darkroom/workflow");
++            // The setter frees the stored string. Own the saved value while
++            // the legacy WB defaults temporarily replace this configuration.
++            gchar *current_workflow =
++              dt_conf_get_string("plugins/darkroom/workflow");
+ 
+             dt_conf_set_string("plugins/darkroom/workflow", "display-referred (legacy)");
+             dt_iop_reload_defaults(module);
+             _dev_insert_module(dev, module, imgid);
+             dt_conf_set_string("plugins/darkroom/workflow", current_workflow);
++            g_free(current_workflow);
+             dt_iop_reload_defaults(module);
+           }
+         }

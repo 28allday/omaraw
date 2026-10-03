@@ -1,0 +1,14 @@
+RawSpeed camera database
+
+Attribution: RawSpeed contributors.
+Source: https://github.com/darktable-org/rawspeed
+Pinned revision: 7cf3dc3b9d9c82b414198b1f57460478be6c6c9d
+
+The cameras.xml database is licensed under Creative Commons
+Attribution-ShareAlike 3.0 Unported (CC-BY-SA-3.0):
+https://creativecommons.org/licenses/by-sa/3.0/
+https://creativecommons.org/licenses/by-sa/3.0/legalcode
+
+This data licence is separate from the decoder code's LGPL licence.
+The database is distributed unmodified with its original licence notice.
+The pinned source accompanies the application's complete source bundle.

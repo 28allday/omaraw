@@ -1,0 +1,52 @@
+--- a/src/imageio/imageio_rawspeed.cc
++++ b/src/imageio/imageio_rawspeed.cc
+@@ -30,6 +30,7 @@
+ #define TYPE_USHORT16 RawImageType::UINT16
+ 
+ #include <memory>
++#include <exiv2/exiv2.hpp>
+ 
+ #define __STDC_LIMIT_MACROS
+ 
+@@ -59,6 +60,27 @@
+                                                           const RawImage r,
+                                                           dt_mipmap_buffer_t *buf);
+ static CameraMetaData *meta = NULL;
++
++// A baked OmaRAW DNG stores linear sRGB, with white balance and tone already
++// applied. It remains a genuine three-plane DNG but must not acquire a second
++// camera workflow when imported into a fresh catalogue or reset to defaults.
++static bool _omaraw_rendered_dng(const char *filename)
++{
++  try
++  {
++    auto file = Exiv2::ImageFactory::open(filename);
++    if(!file) return false;
++    file->readMetadata();
++    const auto &exif = file->exifData();
++    auto model = exif.findKey(Exiv2::ExifKey("Exif.Image.UniqueCameraModel"));
++    auto software = exif.findKey(Exiv2::ExifKey("Exif.Image.Software"));
++    return model != exif.end() && model->toString() == "OmaRAW rendered sRGB"
++      && software != exif.end() && software->toString().find("OmaRAW") == 0
++      && software->toString().find("AI removal") != std::string::npos;
++  }
++  catch(const std::exception &) { return false; }
++}
++
+ 
+ static void dt_rawspeed_load_meta()
+ {
+@@ -339,6 +361,13 @@
+     if(!r->isCFA)
+     {
+       const dt_imageio_retval_t ret = dt_imageio_open_rawspeed_sraw(img, r, mbuf);
++      if(ret == DT_IMAGEIO_OK && r->getDataType() == TYPE_FLOAT32 && r->getCpp() == 3
++         && _omaraw_rendered_dng(filename))
++      {
++        img->flags &= ~(DT_IMAGE_RAW | DT_IMAGE_S_RAW | DT_IMAGE_LDR | DT_IMAGE_4BAYER);
++        img->flags |= DT_IMAGE_HDR;
++        img->buf_dsc.cst = IOP_CS_RGB;
++      }
+       return ret;
+     }
+ 

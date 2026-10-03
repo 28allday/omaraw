@@ -1,0 +1,18 @@
+#!/usr/bin/env sh
+set -eu
+ROOT="$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)"
+if [ "${1:-}" = --build ]; then
+  shift
+  "$ROOT/bin/package" --syncdeps --force "$@"
+  cd "${OMARAW_PACKAGE_DIR:-$ROOT/build-package}"
+  sudo pacman -U "$(makepkg --packagelist)"
+  if [ "$(id -u)" != 0 ] && command -v omaraw >/dev/null 2>&1; then
+    if omaraw skill --link >/dev/null; then
+      printf '%s\n' 'Agent skill installed. Start a new agent session to use it.'
+    else
+      printf '%s\n' 'Existing custom skills were preserved. Check links with: omaraw skill --link' >&2
+    fi
+  fi
+  exit 0
+fi
+exec bash "$ROOT/install.sh" "$@"

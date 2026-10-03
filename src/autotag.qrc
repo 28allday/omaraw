@@ -1,0 +1,6 @@
+<RCC>
+  <qresource prefix="/autotag">
+    <file alias="yolox_nano.onnx">../data/autotag/yolox_nano.onnx</file>
+    <file alias="LICENSE">../data/autotag/LICENSE</file>
+  </qresource>
+</RCC>

@@ -1,0 +1,112 @@
+--- a/src/iop/CMakeLists.txt
++++ b/src/iop/CMakeLists.txt
+@@ -151,6 +151,7 @@
+ add_iop(colorbalancergb "colorbalancergb.c")
+ add_iop(omarawgrade "omarawgrade.c")
+ add_iop(omarawprofile "omarawprofile.c")
++add_iop(omarawlook "omarawlook.c")
+ add_iop(omarawdnggain "omarawdnggain.c")
+ add_iop(omarawhalation "omarawhalation.c")
+ add_iop(omarawprint "omarawprint.c")
+--- a/src/common/iop_order.c
++++ b/src/common/iop_order.c
+@@ -113,6 +113,7 @@
+   { {26.0f }, "hazeremoval", 0},
+   { {27.0f }, "colorin", 0},
+   { { 27.1f }, "omarawdnggain", 0},
++  { { 27.2f }, "omarawlook", 0},
+   { {27.5f }, "channelmixerrgb", 0},
+   { {27.5f }, "contrastntexture", 0}, 
+   { {27.5f }, "diffuse", 0},
+@@ -224,6 +225,7 @@
+   { {27.0f }, "equalizer", 0},
+   { {28.0f }, "colorin", 0},
+   { { 28.1f }, "omarawdnggain", 0},
++  { { 28.2f }, "omarawlook", 0},
+   { {28.5f }, "channelmixerrgb", 0},
+   { {28.5f }, "contrastntexture", 0},
+   { {28.5f }, "diffuse", 0},
+@@ -350,6 +352,7 @@
+   { {27.0f }, "equalizer", 0},
+   { {28.0f }, "colorin", 0},
+   { { 28.1f }, "omarawdnggain", 0},
++  { { 28.2f }, "omarawlook", 0},
+   { {28.5f }, "channelmixerrgb", 0},
+   { {28.5f }, "contrastntexture", 0},
+   { {28.5f }, "diffuse", 0},
+@@ -450,6 +453,7 @@
+   // all the modules between [8; 28] expect linear RGB, so they need to be moved after colorin
+   { { 28.0f }, "colorin", 0 },
+   { { 28.1f }, "omarawdnggain", 0 },
++  { { 28.2f }, "omarawlook", 0 },
+   // moved modules : (copy-pasted in the same order)
+   { { 28.0f }, "denoiseprofile", 0},
+   { { 28.0f }, "bilateral", 0},
+@@ -579,6 +583,7 @@
+   // all the modules between [8; 28] expect linear RGB, so they need to be moved after colorin
+   { { 28.0f }, "colorin", 0 },
+   { { 28.1f }, "omarawdnggain", 0 },
++  { { 28.2f }, "omarawlook", 0 },
+   // moved modules : (copy-pasted in the same order)
+   { { 28.0f }, "denoiseprofile", 0},
+   { { 28.0f }, "bilateral", 0},
+@@ -780,6 +785,7 @@
+   _insert_before(iop_order_list, "colorout", "omarawprint");
+   _insert_before(iop_order_list, "colorout", "omarawprofile");
+   _insert_before(iop_order_list, "channelmixerrgb", "omarawdnggain");
++  _insert_before(iop_order_list, "channelmixerrgb", "omarawlook");
+ }
+ 
+ static dt_iop_order_t _ioppr_get_default_iop_order_version(const dt_imgid_t imgid)
+--- a/src/develop/pixelpipe_hb.c
++++ b/src/develop/pixelpipe_hb.c
+@@ -773,6 +773,31 @@
+   return FALSE;
+ }
+ 
++// The early HSV stage is derived from the selected creative profile. It has
++// no independent history/settings. Resolve the last APPLIED history entry on
++// every sync (including undo and export), then hash those exact parameters so
++// an Amount/selection edit invalidates the early cache as well as the late one.
++static void _omaraw_sync_creative_look(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
++{
++  dt_dev_pixelpipe_iop_t *early=NULL;
++  for(GList *node=pipe->nodes;node;node=node->next) {
++    dt_dev_pixelpipe_iop_t *piece=node->data;
++    if(dt_iop_module_is(piece->module,"omarawlook")) { early=piece; break; }
++  }
++  if(!early) return;
++  dt_dev_history_item_t *selected=NULL;
++  GList *history=dev->history;
++  for(int k=0;k<dev->history_end && history;++k,history=history->next) {
++    dt_dev_history_item_t *item=history->data;
++    if(dt_iop_module_is(item->module,"omarawprofile")) selected=item;
++  }
++  early->enabled=selected && selected->enabled;
++  early->hash=DT_INVALID_HASH;
++  if(!early->enabled || selected->module->params_size!=early->module->params_size) return;
++  early->module->commit_params(early->module,selected->params,pipe,early);
++  early->hash=dt_hash(DT_INITHASH,selected->params,selected->module->params_size);
++}
++
+ void dt_dev_pixelpipe_synch_all(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
+ {
+   dt_pthread_mutex_lock(&pipe->busy_mutex);
+@@ -815,6 +840,8 @@
+     history = g_list_next(history);
+   }
+ 
++  _omaraw_sync_creative_look(pipe,dev);
++
+   // history has been (re)applied, so real raster consumers have re-registered;
+   // drop any phantom users left behind by deleted or de-synced consumers
+   for(GList *nodes = pipe->nodes; nodes; nodes = g_list_next(nodes))
+@@ -844,6 +871,8 @@
+     dt_print_pipe(DT_DEBUG_PARAMS, "synch top history module missing!",
+       pipe, NULL, DT_DEVICE_NONE, NULL, NULL);
+   }
++
++  _omaraw_sync_creative_look(pipe,dev);
+ 
+   // clear any phantom raster users (deleted/de-synced consumers) so a source
+   // doesn't keep republishing its mask and invalidating downstream every run

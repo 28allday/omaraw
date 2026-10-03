@@ -1,0 +1,60 @@
+--- a/src/iop/CMakeLists.txt
++++ b/src/iop/CMakeLists.txt
+@@ -152,6 +152,7 @@
+ add_iop(omarawrepair "omarawrepair.c")
+ add_iop(omarawgrade "omarawgrade.c")
+ add_iop(omarawprofile "omarawprofile.c")
++add_iop(omarawmatch "omarawmatch.c")
+ add_iop(omarawlook "omarawlook.c")
+ add_iop(omarawdnggain "omarawdnggain.c")
+ add_iop(omarawhalation "omarawhalation.c")
+--- a/src/common/iop_order.c
++++ b/src/common/iop_order.c
+@@ -166,6 +166,7 @@
+   { { 57.97f }, "omarawhalation", 0 },
+   { { 57.98f }, "omarawprint", 0 },
+   { { 57.99f }, "omarawprofile", 0 },
++  { { 57.995f }, "omarawmatch", 0 },
+   { {58.0f }, "colorout", 0},
+   { {59.0f }, "channelmixer", 0},
+   { {60.0f }, "soften", 0},
+@@ -299,6 +300,7 @@
+   { { 69.97f }, "omarawhalation", 0 },
+   { { 69.98f }, "omarawprint", 0 },
+   { { 69.99f }, "omarawprofile", 0 },
++  { { 69.995f }, "omarawmatch", 0 },
+   { {70.0f }, "colorout", 0},
+   { {71.0f }, "clahe", 0},
+   { {72.0f }, "finalscale", 0},
+@@ -427,6 +429,7 @@
+   { { 69.97f }, "omarawhalation", 0 },
+   { { 69.98f }, "omarawprint", 0 },
+   { { 69.99f }, "omarawprofile", 0 },
++  { { 69.995f }, "omarawmatch", 0 },
+   { {70.0f }, "colorout", 0},
+   { {71.0f }, "clahe", 0},
+   { {73.0f }, "overexposed", 0},
+@@ -556,6 +559,7 @@
+   { { 69.97f }, "omarawhalation", 0 },
+   { { 69.98f }, "omarawprint", 0 },
+   { { 69.99f }, "omarawprofile", 0 },
++  { { 69.995f }, "omarawmatch", 0 },
+   { { 70.0f }, "colorout", 0 },
+   { { 71.0f }, "clahe", 0 },
+   { { 72.0f }, "finalscale", 0 },
+@@ -687,6 +691,7 @@
+   { { 69.97f }, "omarawhalation", 0 },
+   { { 69.98f }, "omarawprint", 0 },
+   { { 69.99f }, "omarawprofile", 0 },
++  { { 69.995f }, "omarawmatch", 0 },
+   { { 70.0f }, "colorout", 0 },
+   { { 71.0f }, "clahe", 0 },
+   { { 73.0f }, "overexposed", 0 },
+@@ -815,6 +820,7 @@
+   _insert_before(iop_order_list, "colorout", "omarawhalation");
+   _insert_before(iop_order_list, "colorout", "omarawprint");
+   _insert_before(iop_order_list, "colorout", "omarawprofile");
++  _insert_before(iop_order_list, "colorout", "omarawmatch");
+   _omaraw_ensure_after(iop_order_list, "channelmixerrgb", "omarawdnggain");
+   _omaraw_ensure_after(iop_order_list, "omarawdnggain", "omarawlook");
+ }

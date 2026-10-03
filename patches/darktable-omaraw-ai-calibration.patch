@@ -1,0 +1,49 @@
+--- a/src/common/exif.cc
++++ b/src/common/exif.cc
+@@ -1253,6 +1253,23 @@
+     img->exif_highlight_preservation = 0.0f;
+ 
+     Exiv2::ExifData::const_iterator pos;
++    // OmaRAW linear AI copies retain the source camera's tone-mode bias in
++    // BaselineExposure. Reapply it in exposure, where the original used it,
++    // so black level and all later creative effects keep their response.
++    if(FIND_EXIF_TAG("Exif.Image.Software"))
++    {
++      const std::string software = pos->toString();
++      if(software.find("OmaRAW") == 0 && software.find("AI denoise") != std::string::npos
++         && FIND_EXIF_TAG("Exif.Image.BaselineExposure"))
++      {
++        const float bias = pos->toFloat();
++        if(std::isfinite(bias) && bias >= 0.0f && bias <= 4.0f)
++        {
++          img->exif_highlight_preservation = bias;
++          return;
++        }
++      }
++    }
+     if(FIND_EXIF_TAG("Exif.Canon.LightingOpt"))  // Active Lighting Optimization
+     {
+        // tag consists of an array of long values
+--- a/src/iop/rawprepare.c
++++ b/src/iop/rawprepare.c
+@@ -732,7 +732,7 @@
+     DT_CONTROL_SIGNAL_RAISE(DT_SIGNAL_METADATA_UPDATE);
+ 
+   if(!(dt_image_is_rawprepare_supported(&piece->pipe->image))
+-     || _image_is_normalized(&piece->pipe->image))
++     || (_image_is_normalized(&piece->pipe->image) && !d->left && !d->top && !d->right && !d->bottom))
+     piece->enabled = FALSE;
+ 
+   if(piece->pipe->want_detail_mask)
+@@ -770,7 +770,10 @@
+                                     .flat_field = has_gainmaps ? FLAT_FIELD_EMBEDDED : FLAT_FIELD_OFF };
+ 
+   self->hide_enable_button = TRUE;
+-  self->default_enabled = dt_image_is_rawprepare_supported(image) && !_image_is_normalized(image);
++  // Normalized linear DNGs can still have masked sensor borders. Keep the
++  // crop active with unit normalization so copied sensor-space masks align.
++  self->default_enabled = dt_image_is_rawprepare_supported(image)
++    && (!_image_is_normalized(image) || d->left || d->top || d->right || d->bottom);
+ 
+   if(self->widget)
+     gtk_stack_set_visible_child_name(GTK_STACK(self->widget), self->default_enabled ? "raw" : "non_raw");

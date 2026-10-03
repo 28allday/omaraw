@@ -1,0 +1,159 @@
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -207,6 +207,10 @@
+ separate_arguments(lto_link UNIX_COMMAND "${lto_link}")
+ # FIXME: once cmake-3.13 is required, use target_link_options()
+ target_link_libraries(rawspeed PUBLIC ${lto_link})
++
++find_package(PkgConfig REQUIRED)
++pkg_check_modules(OMA_DNG_JXL REQUIRED IMPORTED_TARGET libjxl>=0.9)
++target_link_libraries(rawspeed PRIVATE PkgConfig::OMA_DNG_JXL)
+ 
+ include(src-dependencies)
+ 
+--- a/src/librawspeed/decoders/DngDecoder.cpp
++++ b/src/librawspeed/decoders/DngDecoder.cpp
+@@ -42,6 +42,7 @@
+ #include "tiff/TiffEntry.h"
+ #include "tiff/TiffIFD.h"
+ #include "tiff/TiffTag.h"
++#include "decompressors/omaraw_dng_jxl.h"
+ #include <algorithm>
+ #include <array>
+ #include <cassert>
+@@ -112,6 +113,7 @@
+ 
+     switch (comp) {
+     case 1: // uncompressed
++    case 52546: // JPEG XL (DNG 1.7)
+     case 7: // lossless JPEG
+ #ifdef HAVE_ZLIB
+     case 8: // deflate
+@@ -443,6 +445,34 @@
+   mRaw->createData();
+ 
+   slices.decompress();
++
++  // Restore field-grouped rows/columns before active-area cropping or opcodes.
++  // OmaRAW integration developed with AI assistance for local review.
++  const auto rowTag = static_cast<TiffTag>(50975);
++  const auto columnTag = static_cast<TiffTag>(52547);
++  const uint32_t rows = raw->hasEntry(rowTag) ? raw->getEntry(rowTag)->getU32() : 1;
++  const uint32_t columns = raw->hasEntry(columnTag) ? raw->getEntry(columnTag)->getU32() : 1;
++  const uint32_t width = mRaw->dim.x, height = mRaw->dim.y, cpp = mRaw->getCpp();
++  if (!rows || rows>height || !columns || columns>width)
++    ThrowRDE("Invalid DNG row/column interleave factor");
++  if (rows!=1 || columns!=1) {
++    const auto restore = [&](auto data) {
++      using Sample = std::remove_reference_t<decltype(data(0,0))>;
++      std::vector<Sample> copy(size_t(width)*height*cpp);
++      for(uint32_t y=0; y<height; ++y)
++        memcpy(copy.data()+size_t(y)*width*cpp, &data(y,0), size_t(width)*cpp*sizeof(Sample));
++      for(uint32_t y=0; y<height; ++y) {
++        const uint32_t sy=oma_dng::interleavedIndex(y,height,rows);
++        for(uint32_t x=0; x<width; ++x) {
++          const uint32_t sx=oma_dng::interleavedIndex(x,width,columns);
++          for(uint32_t c=0; c<cpp; ++c)
++            data(y,x*cpp+c)=copy[(size_t(sy)*width+sx)*cpp+c];
++        }
++      }
++    };
++    if(mRaw->getDataType()==RawImageType::F32) restore(mRaw->getF32DataAsUncroppedArray2DRef());
++    else restore(mRaw->getU16DataAsUncroppedArray2DRef());
++  }
+ }
+ 
+ RawImage DngDecoder::decodeRawInternal() {
+@@ -598,8 +628,8 @@
+         codes.applyOpCodes(mRaw);
+       }
+     } catch (const RawDecoderException& e) {
+-      // We push back errors from the opcode parser, since the image may still
+-      // be usable
++      // Missing required JXL linearization cannot produce a valid raw image.
++      if (compression == 52546) throw;
+       mRaw->setError(e.what());
+     }
+   }
+@@ -617,8 +647,13 @@
+   // Set black
+   setBlack(raw);
+ 
+-  // Apply opcodes to lossy DNG
+-  if (compression == 0x884c && !uncorrectedRawValues &&
++  // Integer linear RGB DNGs can use stage-2 maps with any compression.
++  // JPEG XL mosaics can also require these maps to undo encoding companding.
++  const bool integerLinear = !mRaw->isCFA && mRaw->getCpp() == 3 &&
++                             mRaw->getDataType() == RawImageType::UINT16;
++  if ((compression == 0x884c || integerLinear ||
++       (compression == 52546 && mRaw->getDataType() == RawImageType::UINT16))
++      && !uncorrectedRawValues &&
+       raw->hasEntry(TiffTag::OPCODELIST2)) {
+     // We must apply black/white scaling
+     mRaw->scaleBlackWhite();
+@@ -628,8 +663,8 @@
+       DngOpcodes codes(mRaw, raw->getEntry(TiffTag::OPCODELIST2)->getData());
+       codes.applyOpCodes(mRaw);
+     } catch (const RawDecoderException& e) {
+-      // We push back errors from the opcode parser, since the image may still
+-      // be usable
++      // Missing required linearization cannot produce a valid raw image.
++      if (compression == 52546 || integerLinear) throw;
+       mRaw->setError(e.what());
+     }
+     mRaw->blackAreas.clear();
+--- a/src/librawspeed/decompressors/AbstractDngDecompressor.cpp
++++ b/src/librawspeed/decompressors/AbstractDngDecompressor.cpp
+@@ -35,6 +35,7 @@
+ #include "io/ByteStream.h"
+ #include "io/Endianness.h"
+ #include "io/IOException.h"
++#include "decompressors/omaraw_dng_jxl.h"
+ #include <cstdint>
+ #include <limits>
+ #include <string>
+@@ -201,6 +202,35 @@
+ }
+ #endif
+ 
++// OmaRAW JPEG XL DNG integration; developed with AI assistance for local review.
++template <> void AbstractDngDecompressor::decompressThread<52546>() const noexcept {
++#ifdef HAVE_OPENMP
++#pragma omp for schedule(static)
++#endif
++  for (const auto& e : Array1DRef(slices.data(), implicit_cast<int>(slices.size()))) {
++    try {
++      const auto input = e.bs.peekBuffer(e.bs.getRemainSize());
++      const bool floating = mRaw->getDataType() == RawImageType::F32;
++      std::vector<uint8_t> decoded;
++      if (!oma_dng::decodeJxl(input.begin(), input.getSize(), e.dsc.tileW, e.dsc.tileH,
++                             mRaw->getCpp(), mBps, floating, decoded))
++        ThrowRDE("Invalid or unsupported JPEG XL DNG tile");
++      const size_t cpp = mRaw->getCpp();
++      const size_t sampleSize = floating ? sizeof(float) : sizeof(uint16_t);
++      for (unsigned y = 0; y < e.height; ++y) {
++        void* target = floating
++            ? static_cast<void*>(&mRaw->getF32DataAsUncroppedArray2DRef()(e.offY+y, e.offX*cpp))
++            : static_cast<void*>(&mRaw->getU16DataAsUncroppedArray2DRef()(e.offY+y, e.offX*cpp));
++        memcpy(target, decoded.data()+y*e.dsc.tileW*cpp*sampleSize, e.width*cpp*sampleSize);
++      }
++    } catch (const std::exception& err) {
++      mRaw->setError(err.what());
++    } catch (...) {
++      mRaw->setError("JPEG XL DNG decoding failed");
++    }
++  }
++}
++
+ void AbstractDngDecompressor::decompressThread() const noexcept {
+   invariant(mRaw->dim.x > 0);
+   invariant(mRaw->dim.y > 0);
+@@ -210,6 +240,8 @@
+   if (compression == 1) {
+     /* Uncompressed */
+     decompressThread<1>();
++  } else if (compression == 52546) {
++    decompressThread<52546>();
+   } else if (compression == 7) {
+     /* Lossless JPEG */
+     decompressThread<7>();

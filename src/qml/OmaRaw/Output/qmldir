@@ -1,0 +1,3 @@
+module OmaRaw.Output
+OutputWorkspace 1.0 OutputWorkspace.qml
+OutputQueue 1.0 OutputQueue.qml

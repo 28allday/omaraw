@@ -1,0 +1,93 @@
+--- a/src/iop/CMakeLists.txt
++++ b/src/iop/CMakeLists.txt
+@@ -151,6 +151,7 @@
+ add_iop(colorbalancergb "colorbalancergb.c")
+ add_iop(omarawgrade "omarawgrade.c")
+ add_iop(omarawprofile "omarawprofile.c")
++add_iop(omarawdnggain "omarawdnggain.c")
+ add_iop(omarawhalation "omarawhalation.c")
+ add_iop(omarawprint "omarawprint.c")
+ add_iop(cacorrectrgb "cacorrectrgb.c")
+--- a/src/common/iop_order.c
++++ b/src/common/iop_order.c
+@@ -112,6 +112,7 @@
+   { {25.0f }, "profile_gamma", 0},
+   { {26.0f }, "hazeremoval", 0},
+   { {27.0f }, "colorin", 0},
++  { { 27.1f }, "omarawdnggain", 0},
+   { {27.5f }, "channelmixerrgb", 0},
+   { {27.5f }, "contrastntexture", 0}, 
+   { {27.5f }, "diffuse", 0},
+@@ -222,6 +223,7 @@
+   { {26.0f }, "profile_gamma", 0},
+   { {27.0f }, "equalizer", 0},
+   { {28.0f }, "colorin", 0},
++  { { 28.1f }, "omarawdnggain", 0},
+   { {28.5f }, "channelmixerrgb", 0},
+   { {28.5f }, "contrastntexture", 0},
+   { {28.5f }, "diffuse", 0},
+@@ -347,6 +349,7 @@
+   { {26.0f }, "profile_gamma", 0},
+   { {27.0f }, "equalizer", 0},
+   { {28.0f }, "colorin", 0},
++  { { 28.1f }, "omarawdnggain", 0},
+   { {28.5f }, "channelmixerrgb", 0},
+   { {28.5f }, "contrastntexture", 0},
+   { {28.5f }, "diffuse", 0},
+@@ -446,6 +449,7 @@
+   { { 8.0f }, "demosaic", 0 },
+   // all the modules between [8; 28] expect linear RGB, so they need to be moved after colorin
+   { { 28.0f }, "colorin", 0 },
++  { { 28.1f }, "omarawdnggain", 0 },
+   // moved modules : (copy-pasted in the same order)
+   { { 28.0f }, "denoiseprofile", 0},
+   { { 28.0f }, "bilateral", 0},
+@@ -574,6 +578,7 @@
+   { { 8.0f }, "demosaic", 0 },
+   // all the modules between [8; 28] expect linear RGB, so they need to be moved after colorin
+   { { 28.0f }, "colorin", 0 },
++  { { 28.1f }, "omarawdnggain", 0 },
+   // moved modules : (copy-pasted in the same order)
+   { { 28.0f }, "denoiseprofile", 0},
+   { { 28.0f }, "bilateral", 0},
+@@ -774,6 +779,7 @@
+   _insert_before(iop_order_list, "colorout", "omarawhalation");
+   _insert_before(iop_order_list, "colorout", "omarawprint");
+   _insert_before(iop_order_list, "colorout", "omarawprofile");
++  _insert_before(iop_order_list, "channelmixerrgb", "omarawdnggain");
+ }
+ 
+ static dt_iop_order_t _ioppr_get_default_iop_order_version(const dt_imgid_t imgid)
+--- a/src/iop/exposure.c
++++ b/src/iop/exposure.c
+@@ -30,6 +30,7 @@
+ #include "develop/develop.h"
+ #include "develop/imageop.h"
+ #include "common/omaraw_chain.h"
++#include "common/omaraw_dng_gain.h"
+ #include "develop/imageop_math.h"
+ #include "develop/imageop_gui.h"
+ #include "develop/pixelpipe.h"
+@@ -365,6 +366,22 @@
+     d->exposure = 0.0f;
+     d->black = 0.0f;
+     d->compensate_exposure_bias = FALSE;
++  }
++  // DNGs handled by the profile-gain stage already have a baseline exposure
++  // correction. Keep camera exposure-bias compensation opt-in for them; the
++  // generic RAW default can otherwise brighten an HDR merge a second time.
++  if(d->compensate_exposure_bias)
++  {
++    char filename[PATH_MAX]; gboolean from_cache = FALSE;
++    dt_image_full_path(self->dev->image_storage.id, filename, sizeof(filename), &from_cache);
++    const char *ext = strrchr(filename, '.');
++    if(ext && !g_ascii_strcasecmp(ext, ".dng"))
++    {
++      oma_dng_gain correction = {0};
++      if(oma_dng_gain_read(filename, &correction) > 0)
++        d->compensate_exposure_bias = FALSE;
++      oma_dng_gain_clear(&correction);
++    }
+   }
+   // the new default is to compensate for highlight preservation mode,
+   // but ONLY if we're the first instance (to avoid multiple application)

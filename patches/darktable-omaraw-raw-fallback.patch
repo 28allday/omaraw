@@ -1,0 +1,332 @@
+--- a/src/imageio/imageio.c
++++ b/src/imageio/imageio.c
+@@ -155,6 +155,10 @@
+ }
+ 
+ // redirect loaders to surrogate as needed
++#ifndef HAVE_LIBRAW
++#define dt_imageio_open_libraw _unsupported_type
++#endif
++
+ #ifndef HAVE_OPENJPEG
+ #define dt_imageio_open_j2k _unsupported_type
+ #endif
+@@ -1679,6 +1683,17 @@
+       ret = DT_IMAGEIO_UNSUPPORTED_FORMAT;
+   }
+ 
++  // rawspeed can recognize a container without supporting its RAW
++  // compression. Give the alternate decoder a chance, including when that
++  // unsupported compression was reported as corrupt. LibRaw validates its
++  // own decode before publishing any pixels
++  if(ret == DT_IMAGEIO_UNSUPPORTED_FEATURE || ret == DT_IMAGEIO_UNSUPPORTED_CAMERA
++     || ret == DT_IMAGEIO_FILE_CORRUPTED)
++  {
++    const dt_imageio_retval_t fallback = dt_imageio_open_libraw(img, filename, buf);
++    if(fallback == DT_IMAGEIO_OK || fallback == DT_IMAGEIO_CACHE_FULL) ret = fallback;
++  }
++
+   if((ret == DT_IMAGEIO_OK) && !was_hdr && (img->flags & DT_IMAGE_HDR))
+     dt_imageio_set_hdr_tag(img);
+ 
+--- a/src/imageio/imageio_libraw.c
++++ b/src/imageio/imageio_libraw.c
+@@ -26,6 +26,7 @@
+ #include "develop/develop.h"
+ #include "imageio_common.h"
+ #include "imageio_libraw.h"
++#include "imageio_rawspeed.h"
+ 
+ #include <libraw/libraw.h>
+ 
+@@ -295,14 +296,14 @@
+ 
+ GList *warning_missing_support_seen = NULL;
+ 
+-/* LibRaw is expected to read only new Canon CR3 files */
++/* OmaRAW also uses LibRaw for validated RAW compression fallbacks */
+ 
+ static gboolean _supported_image(const gchar *filename)
+ {
+   // At the moment of writing this code CR3 files are not supported by RawSpeed,
+   // so they are always processed by LibRaw.
+   gchar *extensions_whitelist;
+-  const gchar *always_by_libraw = "cr3 x3f";
++  const gchar *always_by_libraw = "cr3 x3f dng raf arw mos";
+ 
+   gchar *ext = g_strrstr(filename, ".");
+   if(!ext)
+@@ -378,6 +379,14 @@
+ }
+ 
+ 
++// a decoder may return success after reporting recoverable data errors;
++// never publish a partially decoded sensor buffer as an editable source
++static void _libraw_data_error(void *data, const char *file, const INT64 offset)
++{
++  gint *failed = data;
++  g_atomic_int_set(failed, TRUE);
++}
++
+ dt_imageio_retval_t dt_imageio_open_libraw(dt_image_t *img,
+                                            const char *filename,
+                                            dt_mipmap_buffer_t *mbuf)
+@@ -393,6 +402,8 @@
+   libraw_data_t *raw = libraw_init(0);
+   if(!raw)
+     return DT_IMAGEIO_LOAD_FAILED;
++  gint data_error = FALSE;
++  libraw_set_dataerror_handler(raw, _libraw_data_error, &data_error);
+ 
+ #if defined(_WIN32) && (defined(UNICODE) || defined(_UNICODE))
+   wchar_t *wfilename = g_utf8_to_utf16(filename, -1, NULL, NULL, NULL);
+@@ -407,14 +418,21 @@
+   libraw_err = libraw_unpack(raw);
+   if(libraw_err != LIBRAW_SUCCESS)
+     goto error;
++  if(g_atomic_int_get(&data_error))
++  {
++    err = DT_IMAGEIO_FILE_CORRUPTED;
++    goto error;
++  }
++  const gboolean rgb = !raw->rawdata.iparams.filters && raw->rawdata.iparams.colors == 3
++    && (raw->rawdata.color3_image || raw->rawdata.color4_image);
+ 
+   // Bad method to detect if camera is fully supported by LibRaw,
+   // but seems to be the best available. LibRaw crx decoder can actually
+   // decode the raw data, but internal metadata like wb_coeffs, crops etc.
+-  // are not populated into libraw structure, or image is not of CFA type.
++  // are not populated into libraw structure, or no sensor buffer is available.
+   if(raw->rawdata.color.cam_mul[0] == 0.0f
+      || dt_isnan(raw->rawdata.color.cam_mul[0])
+-     || !raw->rawdata.raw_image)
++     || (!raw->rawdata.raw_image && !rgb))
+   {
+     dt_print(DT_DEBUG_ALWAYS,
+              "[libraw_open] detected unsupported image `%s'", img->filename);
+@@ -442,19 +460,79 @@
+     :raw->rawdata.color.maximum;
+ 
+   // Copy black level
+-  img->raw_black_level = raw->rawdata.color.black;
++  // fujifilm stores its offset in a repeated black-level tile instead of
++  // the scalar; only a uniform tile can be represented by this loader
++  const unsigned int black_rows = raw->rawdata.color.cblack[4];
++  const unsigned int black_cols = raw->rawdata.color.cblack[5];
++  unsigned int tile_black = 0;
++  if(black_rows && black_cols)
++  {
++    const size_t count = (size_t)black_rows * black_cols;
++    if(count > sizeof(raw->rawdata.color.cblack) / sizeof(unsigned int) - 6)
++    {
++      err = DT_IMAGEIO_FILE_CORRUPTED;
++      goto error;
++    }
++    tile_black = raw->rawdata.color.cblack[6];
++    for(size_t i = 1; i < count; i++)
++      if(raw->rawdata.color.cblack[6 + i] != tile_black)
++      {
++        err = DT_IMAGEIO_UNSUPPORTED_FEATURE;
++        goto error;
++      }
++  }
++  img->raw_black_level = raw->rawdata.color.black + tile_black;
+   for(size_t c = 0; c < 4; ++c)
+     img->raw_black_level_separate[c] =
+-      raw->rawdata.color.black + raw->rawdata.color.cblack[c];
++      img->raw_black_level + raw->rawdata.color.cblack[c];
+ 
+   // AsShot WB coeffs
++  const float green = raw->rawdata.color.cam_mul[1];
++  if(!isfinite(green) || green <= 0.0f)
++  {
++    err = DT_IMAGEIO_UNSUPPORTED_FEATURE;
++    goto error;
++  }
+   for(size_t c = 0; c < 4; ++c)
+-    img->wb_coeffs[c] = raw->rawdata.color.cam_mul[c];
++    img->wb_coeffs[c] = raw->rawdata.color.cam_mul[c] / green;
++
++  // Sony reduced RAW carries as-shot-balanced RGB; undo that balance around
++  // black so the pipeline can apply editable white balance exactly once
++  float rgb_unbalance[3] = { 1.0f, 1.0f, 1.0f };
++  if(rgb && (raw->rawdata.color.as_shot_wb_applied & LIBRAW_ASWB_APPLIED))
++  {
++    for(int c = 0; c < 3; c++)
++    {
++      if(!isfinite(img->wb_coeffs[c]) || img->wb_coeffs[c] <= 0.0f)
++      {
++        err = DT_IMAGEIO_UNSUPPORTED_FEATURE;
++        goto error;
++      }
++      rgb_unbalance[c] = 1.0f / img->wb_coeffs[c];
++    }
++    img->raw_white_point = raw->rawdata.color.maximum;
++  }
+ 
+   // Grab the Adobe coeffs
+   for(int k = 0; k < 4; k++)
+     for(int i = 0; i < 3; i++)
+       img->adobe_XYZ_to_CAM[k][i] = raw->rawdata.color.cam_xyz[k][i];
++
++  float matrix_energy = 0.0f;
++  for(int k = 0; k < 3; k++)
++    for(int i = 0; i < 3; i++) matrix_energy += fabsf(img->adobe_XYZ_to_CAM[k][i]);
++  // DNG can provide its own D65 matrix through EXIF without a LibRaw
++  // camera-table matrix (for example Apple ProRAW). The input profile
++  // already prefers that embedded matrix; do not reject a valid file.
++  if((!isfinite(matrix_energy) || matrix_energy == 0.0f)
++     && !dt_is_valid_colormatrix(img->d65_color_matrix[0]))
++  {
++    if(!dt_rawspeed_lookup_color_matrix(img->exif_maker, img->exif_model, img->adobe_XYZ_to_CAM))
++    {
++      err = DT_IMAGEIO_UNSUPPORTED_CAMERA;
++      goto error;
++    }
++  }
+ 
+   // Raw dimensions. This is the full sensor range.
+   img->width = raw->rawdata.sizes.raw_width;
+@@ -466,6 +544,22 @@
+   img->crop_right = raw->rawdata.sizes.raw_width - raw->rawdata.sizes.width - raw->rawdata.sizes.left_margin;
+   img->crop_bottom = raw->rawdata.sizes.raw_height - raw->rawdata.sizes.height - raw->rawdata.sizes.top_margin;
+ 
++  // New Sony reduced RGB models may expose the padded tile canvas as the
++  // active area. Its unused chroma samples turn green; honor the recorded
++  // sensor crop while retaining the original buffer stride and dimensions.
++  if(rgb && (raw->rawdata.color.as_shot_wb_applied & LIBRAW_ASWB_SONY))
++  {
++    const libraw_raw_inset_crop_t *crop = &raw->sizes.raw_inset_crops[0];
++    if(crop->cleft < 0xffff && crop->ctop < 0xffff && crop->cwidth > 0 && crop->cheight > 0
++       && (uint64_t)crop->cleft + crop->cwidth <= (uint64_t)img->width
++       && (uint64_t)crop->ctop + crop->cheight <= (uint64_t)img->height)
++    {
++      img->crop_x = crop->cleft; img->crop_y = crop->ctop;
++      img->crop_right = img->width - crop->cleft - crop->cwidth;
++      img->crop_bottom = img->height - crop->ctop - crop->cheight;
++    }
++  }
++
+   img->p_width = img->width - img->crop_x - img->crop_right;
+   img->p_height = img->height - img->crop_y - img->crop_bottom;
+   // We can reuse the libraw filters property, it's already well-handled in dt.
+@@ -488,11 +582,23 @@
+ 
+   dt_exif_img_check_additional_tags(img, filename);
+ 
+-  // For CR3, we only have Bayer data and a single channel
+-  img->buf_dsc.channels = 1;
+-
+-  img->buf_dsc.datatype = TYPE_UINT16;
+-  img->buf_dsc.cst = IOP_CS_RAW;
++  // keep X-Trans aligned to the uncropped sensor buffer, like RawSpeed
++  if(img->buf_dsc.filters == 9u)
++    memcpy(img->buf_dsc.xtrans, raw->rawdata.iparams.xtrans_abs, sizeof(img->buf_dsc.xtrans));
++
++  img->buf_dsc.channels = rgb ? 4 : 1;
++  img->buf_dsc.datatype = rgb ? TYPE_FLOAT : TYPE_UINT16;
++  img->buf_dsc.cst = rgb ? IOP_CS_RGB : IOP_CS_RAW;
++  if(img->width <= 0 || img->height <= 0 || img->p_width <= 0 || img->p_height <= 0
++     || img->crop_right < 0 || img->crop_bottom < 0
++     || raw->rawdata.sizes.raw_pitch < (size_t)img->width * sizeof(uint16_t)
++          * (rgb ? (raw->rawdata.color4_image ? 4 : 3) : 1))
++  {
++    err = DT_IMAGEIO_FILE_CORRUPTED;
++    goto error;
++  }
++  img->fuji_rotation_pos = 0;
++  img->pixel_aspect_ratio = raw->rawdata.sizes.pixel_aspect;
+ 
+   // Allocate and copy image from libraw buffer to dt
+   void *buf = dt_mipmap_cache_alloc(mbuf, img);
+@@ -508,7 +614,32 @@
+   // Use faster memcpy if buffer sizes are equal
+   const size_t bufSize_mipmap = (size_t)img->width * img->height * sizeof(uint16_t);
+   const size_t bufSize_libraw = (size_t)raw->rawdata.sizes.raw_pitch * raw->rawdata.sizes.raw_height;
+-  if(bufSize_mipmap == bufSize_libraw)
++  if(rgb)
++  {
++    // linear RGB DNG and Sony reduced RAW are camera-space samples, not a
++    // rendered JPEG. Match RawSpeed's sRAW float/65535 representation so
++    // rawprepare, white balance and the camera matrix remain editable
++    const int channels = raw->rawdata.color4_image ? 4 : 3;
++    const unsigned char *source = raw->rawdata.color4_image
++      ? (const unsigned char *)raw->rawdata.color4_image
++      : (const unsigned char *)raw->rawdata.color3_image;
++    DT_OMP_FOR()
++    for(int y = 0; y < img->height; y++)
++    {
++      const uint16_t *in = (const uint16_t *)(source + (size_t)y * raw->rawdata.sizes.raw_pitch);
++      float *out = (float *)buf + (size_t)y * img->width * 4;
++      for(int x = 0; x < img->width; x++)
++      {
++        for(int c = 0; c < 3; c++)
++        {
++          const float black = img->raw_black_level_separate[c];
++          out[x * 4 + c] = ((in[x * channels + c] - black) * rgb_unbalance[c] + black) / 65535.0f;
++        }
++        out[x * 4 + 3] = 0.0f;
++      }
++    }
++  }
++  else if(bufSize_mipmap == bufSize_libraw)
+   {
+     memcpy(buf, raw->rawdata.raw_image, bufSize_mipmap);
+   }
+@@ -530,7 +661,13 @@
+     img->flags &= ~DT_IMAGE_4BAYER;
+   }
+ 
+-  if(img->buf_dsc.filters)
++  img->flags &= ~DT_IMAGE_S_RAW;
++  if(rgb)
++  {
++    img->flags &= ~(DT_IMAGE_RAW | DT_IMAGE_LDR | DT_IMAGE_HDR | DT_IMAGE_4BAYER);
++    img->flags |= DT_IMAGE_S_RAW;
++  }
++  else if(img->buf_dsc.filters)
+   {
+     img->flags &= ~DT_IMAGE_LDR;
+     img->flags &= ~DT_IMAGE_HDR;
+--- a/src/imageio/imageio_rawspeed.cc
++++ b/src/imageio/imageio_rawspeed.cc
+@@ -114,6 +114,28 @@
+     g_strlcpy(al, model, al_len);
+   }
+   return got_it_done;
++}
++
++// A fallback decoder can unpack a new camera before its own coefficient
++// table knows that model. Reuse the same camera matrix as native RawSpeed.
++gboolean dt_rawspeed_lookup_color_matrix(const char *maker, const char *model, float matrix[4][3])
++{
++  try
++  {
++    dt_rawspeed_load_meta();
++    const Camera *cam = meta->getCamera(maker, model);
++    if(!cam || (cam->color_matrix.size() != 9 && cam->color_matrix.size() != 12)) return FALSE;
++    for(int k = 0; k < 4; k++)
++      for(int i = 0; i < 3; i++)
++        matrix[k][i] = size_t(3 * k + i) < cam->color_matrix.size()
++          ? float(cam->color_matrix[3 * k + i]) : 0.0f;
++    return TRUE;
++  }
++  catch(const std::exception &exc)
++  {
++    dt_print(DT_DEBUG_ALWAYS, "[rawspeed] camera matrix lookup: %s", exc.what());
++    return FALSE;
++  }
+ }
+ 
+ uint32_t dt_rawspeed_crop_dcraw_filters(const uint32_t filters,
+--- a/src/imageio/imageio_rawspeed.h
++++ b/src/imageio/imageio_rawspeed.h
+@@ -27,6 +27,8 @@
+                                        char *mk, int mk_len, char *md, int md_len,
+                                        char *al, int al_len);
+ 
++gboolean dt_rawspeed_lookup_color_matrix(const char *maker, const char *model, float matrix[4][3]);
++
+ uint32_t dt_rawspeed_crop_dcraw_filters(uint32_t filters, uint32_t crop_x, uint32_t crop_y);
+ 
+ dt_imageio_retval_t dt_imageio_open_rawspeed(dt_image_t *img, const char *filename,

@@ -1,0 +1,22 @@
+--- a/src/iop/demosaic.c	2026-09-21 08:46:02.160495809 +0100
++++ b/src/iop/demosaic.c	2026-09-21 08:46:02.161170310 +0100
+@@ -1479,12 +1479,17 @@
+ 
+   if(dt_image_is_monochrome(img))
+     d->demosaicing_method = dt_image_is_mono_sraw(img) ? DT_IOP_DEMOSAIC_MONO : DT_IOP_DEMOSAIC_PASSTHROUGH_MONOCHROME;
++  // OmaRAW: the dual methods by default. Measured at full size on X-Trans
++  // (X100S, X-T3, X-T4) and Bayer (X100, D7000, LX100) files, with and
++  // without denoising, they give the least false colour on edges and the
++  // calmest flat areas for the same detail, at 0.1-0.5 s per full export.
++  // The application does not offer the choice.
+   else if(img->buf_dsc.filters == 9u)
+-    d->demosaicing_method = DT_IOP_DEMOSAIC_MARKESTEIJN;
++    d->demosaicing_method = DT_IOP_DEMOSAIC_MARKEST3_DUAL;
+   else if(img->flags & DT_IMAGE_4BAYER)
+     d->demosaicing_method = DT_IOP_DEMOSAIC_VNG4;
+   else
+-    d->demosaicing_method = DT_IOP_DEMOSAIC_RCD;
++    d->demosaicing_method = DT_IOP_DEMOSAIC_AMAZE_DUAL;
+ 
+   d->cs_thrs = _get_variance_threshold(self);
+ 

@@ -1,0 +1,176 @@
+--- a/src/iop/ashift.c
++++ b/src/iop/ashift.c
+@@ -2791,7 +2791,7 @@
+     " crop area (%.4f %.4f %.4f %.4f) wd=%i ht=%i",
+     iter, cropfit.x, cropfit.y, cropfit.alpha,
+     g->cl, g->cr, g->ct, g->cb, cropfit.width, cropfit.height);
+-  dt_control_queue_redraw_center();
++  if(g->cropmode) dt_control_queue_redraw_center();
+   return;
+ 
+ failed:
+@@ -2800,11 +2800,13 @@
+   _clear_shadow_crop_box(g);
+   _commit_crop_box(p, g);
+   p->cropmode = ASHIFT_CROP_OFF;
+-  dt_bauhaus_combobox_set(g->cropmode, p->cropmode);
++  if(g->cropmode) dt_bauhaus_combobox_set(g->cropmode, p->cropmode);
+   g->fitting = 0;
+-  dt_control_log(_("automatic cropping failed"));
++  if(g->cropmode) dt_control_log(_("automatic cropping failed"));
+   return;
+ }
++
++#include "omaraw_geometry.h"
+ 
+ // manually adjust crop area by shifting its center
+ static void crop_adjust(const dt_iop_module_t *self,
+--- /dev/null
++++ b/src/iop/omaraw_geometry.h
+@@ -0,0 +1,146 @@
++// OmaRAW headless geometry ABI 1. Included in ashift.c so estimation and
++// cropping use the very same homography as preview and export. No GTK state,
++// history or caller parameters are touched until the calculation succeeds.
++__attribute__((visibility("default")))
++int omaraw_geometry_v1(void *parameters, int width, int height,
++                      float *rgba, int rw, int rh, int operation, int cropmode,
++                      const float *guides, int count)
++{
++  if(!parameters || width < 8 || height < 8 || operation < 0 || operation > 6
++     || cropmode < 0 || cropmode > 2 || count < 0 || count > 4)
++    return 1;
++  dt_iop_ashift_params_t p = *(dt_iop_ashift_params_t *)parameters;
++  dt_iop_ashift_gui_data_t g = { 0 };
++  dt_iop_module_t module = { 0 };
++  module.gui_data = &g;
++  g.buf_width = g.lines_in_width = width;
++  g.buf_height = g.lines_in_height = height;
++  g.rotation_range = 45.0f;
++  g.lensshift_v_range = g.lensshift_h_range = 1.5f;
++  g.shear_range = 0.5f;
++  g.cr = g.cb = 1.0f;
++  int result = 0;
++  if(operation == 6)
++  {
++    p.rotation = p.lensshift_v = p.lensshift_h = p.shear = 0.0f;
++    p.aspect = 1.0f;
++  }
++  else if(operation > 0)
++  {
++    if(operation == 5)
++    {
++      if(!guides || count < 2) return 2;
++      g.lines = calloc(count, sizeof(*g.lines));
++      if(!g.lines) return 1;
++      g.lines_count = count;
++      for(int i = 0; i < count; ++i)
++      {
++        dt_iop_ashift_line_t *line = &g.lines[i];
++        const float *guide = guides + i * 5;
++        for(int j = 0; j < 5; ++j)
++          if(!isfinite(guide[j]) || guide[j] < 0 || guide[j] > 1) { result = 1; goto done; }
++        for(int j = 0; j < 2; ++j)
++        {
++          float *out = j ? line->p2 : line->p1;
++          out[0] = guide[j*2] * width;
++          out[1] = guide[j*2+1] * height;
++          out[2] = 1;
++        }
++        line->length = hypotf(line->p2[0]-line->p1[0], line->p2[1]-line->p1[1]);
++        if(line->length < fminf(width, height) * 0.05f) { result = 2; goto done; }
++        line->width = 1; line->weight = line->length;
++        vec3prodn(line->L, line->p1, line->p2); vec3lnorm(line->L, line->L);
++        const int vertical = guide[4] > 0.5f;
++        line->type = vertical ? ASHIFT_LINE_VERTICAL_SELECTED : ASHIFT_LINE_HORIZONTAL_SELECTED;
++        if(vertical) { ++g.vertical_count; g.vertical_weight += line->weight; }
++        else { ++g.horizontal_count; g.horizontal_weight += line->weight; }
++      }
++      // Two distinct guides per fitted axis; one guide leaves perspective
++      // underdetermined. Never silently ignore a lone guide of the other axis.
++      if(g.vertical_count == 1 || g.horizontal_count == 1) { result = 2; goto done; }
++      for(int i = 0; i < count; ++i) for(int j = i + 1; j < count; ++j)
++        if(g.lines[i].type == g.lines[j].type)
++        {
++          const float dx = (g.lines[i].p1[0] + g.lines[i].p2[0] - g.lines[j].p1[0] - g.lines[j].p2[0]) * 0.5f;
++          const float dy = (g.lines[i].p1[1] + g.lines[i].p2[1] - g.lines[j].p1[1] - g.lines[j].p2[1]) * 0.5f;
++          if(fabsf(g.lines[i].L[0]*dx + g.lines[i].L[1]*dy) < fminf(width, height)*0.04f)
++          { result = 2; goto done; }
++        }
++    }
++    else
++    {
++      if(!rgba || rw < 8 || rh < 8 || rw > 1600 || rh > 1600) return 1;
++      // Analysis uses a finite display-range image. Do not feed negative
++      // scene values into fractional gamma or the line detector.
++      for(size_t i = 0; i < (size_t)rw * rh; ++i)
++        for(int c = 0; c < 3; ++c)
++          rgba[4*i+c] = isfinite(rgba[4*i+c]) ? CLAMP(rgba[4*i+c], 0.0f, 1.0f) : 0.0f;
++      // Linear Rec.709 preview, independently of whether its source was RAW.
++      if(!line_detect(rgba, rw, rh, 0, 0, (float)rw / width,
++                      &g.lines, &g.lines_count, &g.vertical_count, &g.horizontal_count,
++                      &g.vertical_weight, &g.horizontal_weight, ASHIFT_ENHANCE_NONE, TRUE))
++        return 2;
++      // Native outlier removal discards most of each group. Sparse scenes
++      // need their few edges intact; the residual check below still rejects
++      // contradictory lines.
++      if(g.vertical_count > 8 && g.horizontal_count > 8 && !_remove_outliers(&module))
++      { result = 1; goto done; }
++    }
++    int axes = 0;
++    if(operation == 2) axes = ASHIFT_FIT_LINES_VERT;
++    else if(operation == 3) axes = ASHIFT_FIT_LINES_HOR;
++    else if(operation == 4) axes = ASHIFT_FIT_LINES_BOTH;
++    else
++    {
++      if(g.vertical_count >= 2) axes |= ASHIFT_FIT_LINES_VERT;
++      if(g.horizontal_count >= 2) axes |= ASHIFT_FIT_LINES_HOR;
++    }
++    if(!axes) { result = 2; goto done; }
++    int fit = ASHIFT_FIT_ROTATION | axes;
++    if(operation != 1)
++    {
++      if(axes & ASHIFT_FIT_LINES_VERT) fit |= ASHIFT_FIT_LENS_VERT;
++      if(axes & ASHIFT_FIT_LINES_HOR) fit |= ASHIFT_FIT_LENS_HOR;
++    }
++    const int rc = nmsfit(&module, &p, fit);
++    if(rc != NMS_SUCCESS) { result = rc == NMS_NOT_ENOUGH_LINES ? 2 : 3; goto done; }
++    // Reject a compromise between contradictory lines. A successful numeric
++    // optimisation alone does not mean the detected structure was reliable.
++    float h[9];
++    _homography(h, p.rotation, p.lensshift_v, p.lensshift_h, p.shear,
++                p.mode == ASHIFT_MODE_GENERIC ? DEFAULT_F_LENGTH : p.f_length*p.crop_factor,
++                p.mode == ASHIFT_MODE_GENERIC ? 0 : p.orthocorr,
++                p.mode == ASHIFT_MODE_GENERIC ? 1 : p.aspect, width, height, ASHIFT_HOMOGRAPH_FORWARD);
++    double error = 0, weights = 0;
++    for(int i = 0; i < g.lines_count; ++i)
++    {
++      const dt_iop_ashift_line_t *l = &g.lines[i];
++      if(!(l->type & ASHIFT_LINE_SELECTED) || !(l->type & ASHIFT_LINE_RELEVANT)) continue;
++      const int vertical = (l->type & ASHIFT_LINE_DIRVERT) != 0;
++      if(!(axes & (vertical ? ASHIFT_FIT_LINES_VERT : ASHIFT_FIT_LINES_HOR))) continue;
++      float a[3], b[3]; mat3mulv(a, h, l->p1); mat3mulv(b, h, l->p2);
++      const float dx = b[0]/b[2]-a[0]/a[2], dy = b[1]/b[2]-a[1]/a[2];
++      const double angle = atan2(fabs(vertical ? dx : dy), fabs(vertical ? dy : dx));
++      error += l->weight * angle * angle; weights += l->weight;
++    }
++    if(weights <= 0 || !isfinite(error) || sqrt(error / weights) > deg2radf(2.0f))
++    { result = 3; goto done; }
++  }
++  p.cropmode = cropmode;
++  p.cl = p.ct = 0; p.cr = p.cb = 1;
++  if(cropmode && (fabsf(p.rotation) > 1e-4f || fabsf(p.lensshift_v) > 1e-4f
++                  || fabsf(p.lensshift_h) > 1e-4f || fabsf(p.shear) > 1e-4f))
++  {
++    do_crop(&module, &p);
++    if(p.cropmode == ASHIFT_CROP_OFF) { result = 4; goto done; }
++    p.cl = g.cl; p.cr = g.cr; p.ct = g.ct; p.cb = g.cb;
++  }
++  if(!isfinite(p.rotation) || !isfinite(p.lensshift_v) || !isfinite(p.lensshift_h)
++     || !isfinite(p.cl) || !isfinite(p.cr) || !isfinite(p.ct) || !isfinite(p.cb)
++     || p.cr-p.cl < .01f || p.cb-p.ct < .01f)
++  { result = 3; goto done; }
++  *(dt_iop_ashift_params_t *)parameters = p;
++done:
++  free(g.lines);
++  return result;
++}

@@ -1,0 +1,18 @@
+module OmaRaw.App
+LaunchWindow 1.0 LaunchWindow.qml
+LaunchVideo 1.0 LaunchVideo.qml
+AppTitleBar 1.0 AppTitleBar.qml
+WorkspaceBar 1.0 WorkspaceBar.qml
+StatusBar 1.0 StatusBar.qml
+StyledMenu 1.0 StyledMenu.qml
+SMenuItem 1.0 SMenuItem.qml
+MenuSep 1.0 MenuSep.qml
+CommandPalette 1.0 CommandPalette.qml
+ShortcutsDialog 1.0 ShortcutsDialog.qml
+PreferencesDialog 1.0 PreferencesDialog.qml
+CatalogMaintenanceDialog 1.0 CatalogMaintenanceDialog.qml
+AboutDialog 1.0 AboutDialog.qml
+HelpDialog 1.0 HelpDialog.qml
+NewCatalogDialog 1.0 NewCatalogDialog.qml
+CatalogChooserWindow 1.0 CatalogChooserWindow.qml
+PresetImportDialog 1.0 PresetImportDialog.qml

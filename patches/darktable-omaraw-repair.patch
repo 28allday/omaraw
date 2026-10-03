@@ -1,0 +1,60 @@
+--- a/src/common/iop_order.c
++++ b/src/common/iop_order.c
+@@ -89,6 +89,7 @@
+   { { 7.0f }, "rawdenoise", 0},
+   { { 8.0f }, "demosaic", 0},
+   { { 9.0f }, "mask_manager", 0},
++  { {10.0f }, "omarawrepair", 0},
+   { {10.0f }, "denoiseprofile", 0},
+   { {11.0f }, "tonemap", 0},
+   { {12.0f }, "exposure", 0},
+@@ -193,6 +194,7 @@
+   { { 6.0f }, "hotpixels", 0},
+   { { 7.0f }, "rawdenoise", 0},
+   { { 8.0f }, "demosaic", 0},
++  { { 9.0f }, "omarawrepair", 0},
+   { { 9.0f }, "denoiseprofile", 0},
+   { {10.0f }, "bilateral", 0},
+   { {11.0f }, "rotatepixels", 0},
+@@ -319,6 +321,7 @@
+   { { 6.0f }, "hotpixels", 0},
+   { { 7.0f }, "rawdenoise", 0},
+   { { 8.0f }, "demosaic", 0},
++  { { 9.0f }, "omarawrepair", 0},
+   { { 9.0f }, "denoiseprofile", 0},
+   { {10.0f }, "bilateral", 0},
+   { {11.0f }, "rotatepixels", 0},
+@@ -450,6 +453,7 @@
+   // all the modules between [8; 28] expect linear RGB, so they need to be moved after colorin
+   { { 28.0f }, "colorin", 0 },
+   // moved modules : (copy-pasted in the same order)
++  { { 28.0f }, "omarawrepair", 0},
+   { { 28.0f }, "denoiseprofile", 0},
+   { { 28.0f }, "bilateral", 0},
+   { { 28.0f }, "rotatepixels", 0},
+@@ -579,6 +583,7 @@
+   // all the modules between [8; 28] expect linear RGB, so they need to be moved after colorin
+   { { 28.0f }, "colorin", 0 },
+   // moved modules : (copy-pasted in the same order)
++  { { 28.0f }, "omarawrepair", 0},
+   { { 28.0f }, "denoiseprofile", 0},
+   { { 28.0f }, "bilateral", 0},
+   { { 28.0f }, "rotatepixels", 0},
+@@ -789,6 +794,7 @@
+   //                The insertion can be done depending on the current
+   //                iop-order list kind.
+   _insert_before(iop_order_list, "nlmeans", "negadoctor");
++  _insert_before(iop_order_list, "denoiseprofile", "omarawrepair");
+   _insert_before(iop_order_list, "negadoctor", "channelmixerrgb");
+   _insert_before(iop_order_list, "negadoctor", "contrastntexture");  
+   _insert_before(iop_order_list, "negadoctor", "censorize");
+--- a/src/iop/CMakeLists.txt
++++ b/src/iop/CMakeLists.txt
+@@ -149,6 +149,7 @@
+ add_iop(channelmixerrgb "channelmixerrgb.c" "../chart/common.c")
+ add_iop(censorize "censorize.c")
+ add_iop(colorbalancergb "colorbalancergb.c")
++add_iop(omarawrepair "omarawrepair.c")
+ add_iop(omarawgrade "omarawgrade.c")
+ add_iop(omarawprofile "omarawprofile.c")
+ add_iop(omarawlook "omarawlook.c")

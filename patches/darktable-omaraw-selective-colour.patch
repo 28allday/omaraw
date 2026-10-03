@@ -1,0 +1,62 @@
+--- a/src/iop/colorequal.c
++++ b/src/iop/colorequal.c
+@@ -1733,6 +1733,10 @@
+   // Number of terms for the cosine series
+   const int m = (int)ceilf(3.f * sqrtf(smoothing));
+ 
++  // OmaRAW: the values at the nodes, before the solve below replaces them.
++  float given[NODES];
++  memcpy(given, nodes, sizeof(given));
++
+   float DT_ALIGNED_ARRAY A[NODES][NODES] = { { 0.f } };
+ 
+   // Build the A matrix with nodes
+@@ -1774,6 +1778,48 @@
+ 
+     if(clip) LUT[i] = fmaxf(0.f, LUT[i]);
+   }
++
++  // OmaRAW: for saturation and brightness (clip), keep the curve between the
++  // two nodes either side of each hue. The radial basis overshoots past
++  // them, so raising one node pulled the hues beyond its neighbours below
++  // neutral: red + took saturation from yellow and magenta. Bounded, a
++  // raised node lifts only up to its neighbours' hues, and a curve with all
++  // nodes equal is exactly flat.
++  if(clip)
++  {
++    float at[NODES];
++    for(int k = 0; k < NODES; k++)
++    {
++      float a = _get_hue_node(k, hue_shift);
++      while(a < -M_PI_F) a += 2.f * M_PI_F;
++      while(a >= M_PI_F) a -= 2.f * M_PI_F;
++      at[k] = a;
++    }
++    for(int i = 0; i < LUT_ELEM; i++)
++    {
++      const float hue = deg2radf((float)i * 360.0f / (float)LUT_ELEM) - M_PI_F;
++      // The node at or before this hue going round the circle, and the next.
++      int below = -1;
++      float gap = 4.f * M_PI_F;
++      for(int k = 0; k < NODES; k++)
++      {
++        float d = hue - at[k];
++        while(d < 0.f) d += 2.f * M_PI_F;
++        if(d < gap) { gap = d; below = k; }
++      }
++      int above = -1;
++      gap = 4.f * M_PI_F;
++      for(int k = 0; k < NODES; k++)
++      {
++        float d = at[k] - hue;
++        while(d <= 0.f) d += 2.f * M_PI_F;
++        if(d < gap) { gap = d; above = k; }
++      }
++      if(below < 0 || above < 0) continue;
++      const float lo = fminf(given[below], given[above]), hi = fmaxf(given[below], given[above]);
++      LUT[i] = fminf(hi, fmaxf(lo, LUT[i]));
++    }
++  }
+ }
+ 
+ void init_pipe(dt_iop_module_t *self,

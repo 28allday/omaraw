@@ -1,0 +1,38 @@
+[
+  {
+    "id": "adams-make",
+    "author": "Ansel Adams",
+    "text": "You don't take a photograph, you make it.",
+    "source": "https://www.anseladams.com/pages/shop"
+  },
+  {
+    "id": "lange-see",
+    "author": "Dorothea Lange",
+    "text": "The camera is an instrument that teaches people how to see without a camera.",
+    "source": "https://www.vam.ac.uk/articles/cameraless-photography"
+  },
+  {
+    "id": "capa-close",
+    "author": "Robert Capa",
+    "text": "If your pictures aren’t good enough, you’re not close enough.",
+    "source": "https://store.magnumphotos.com/products/magnum-editions-poster-champs-elysees-paris-1944"
+  },
+  {
+    "id": "cartier-bresson-align",
+    "author": "Henri Cartier-Bresson",
+    "text": "To take a photograph is to align the head, the eye and the heart. It's a way of life.",
+    "source": "https://www.magnumphotos.com/photographer/henri-cartier-bresson/"
+  },
+  {
+    "id": "parks-camera",
+    "author": "Gordon Parks",
+    "text": "I saw that the camera could be a weapon against poverty, against racism, against all sorts of social wrongs.",
+    "source": "https://www.gordonparksfoundation.org/index.php/attachment/en/604ff958bec27e4e7f684922/News/5c487e623ac138867c9de138"
+  },
+  {
+    "id": "erwitt-notice",
+    "author": "Elliott Erwitt",
+    "text": "All the technique in the world doesn’t compensate for the inability to notice things.",
+    "source": "https://www.state-media.com/f22/interview/erwitt"
+  }
+]

@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# Build a checksummed source snapshot with its pinned engine. No installation.
+set -euo pipefail
+if [[ ${1:-} == --help || ${1:-} == -h ]]; then
+  printf '%s\n' 'Usage: bin/package [--prepare | makepkg build options]' \
+    'Builds the app, its pinned engine and a matching source bundle in build-package/.'
+  exit 0
+fi
+ROOT="$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)"
+PACKAGE_DIR="${OMARAW_PACKAGE_DIR:-$ROOT/build-package}"
+mkdir -p "$PACKAGE_DIR"
+PACKAGE_DIR="$(cd "$PACKAGE_DIR" && pwd)"
+export SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-$(git -C "$ROOT" log -1 --format=%ct)}"
+python3 "$ROOT/tools/package-source.py" "$PACKAGE_DIR"
+if [[ ${1:-} == --prepare ]]; then exit 0; fi
+cd "$PACKAGE_DIR"
+makepkg --cleanbuild "$@"
+# Keep complete matching sources beside the binary for rebuilding/distribution.
+makepkg --allsource --force
+# Checksums for this build's two artefacts, so whoever installs them on
+# another machine can verify what they downloaded. Named for the release.
+# Ask makepkg for the names: its PKGEXT, SRCEXT and CARCH come from the
+# builder's makepkg.conf, not from here.
+VERSION="$(sed -n 's/^pkgver=//p' PKGBUILD)-$(sed -n 's/^pkgrel=//p' PKGBUILD)"
+mapfile -t BUILT < <(makepkg --packagelist)
+shopt -s nullglob
+SOURCES=("omaraw-$VERSION".src.tar*)
+shopt -u nullglob
+ARTEFACTS=()
+for file in "${BUILT[@]}" "${SOURCES[@]}"; do
+  if [[ $(dirname -- "$file") == "$PWD" ]]; then ARTEFACTS+=("$(basename -- "$file")"); else ARTEFACTS+=("$file"); fi
+done
+(( ${#SOURCES[@]} )) || { printf 'No source bundle omaraw-%s.src.tar* was made\n' "$VERSION" >&2; exit 1; }
+sha256sum "${ARTEFACTS[@]}" > SHA256SUMS
+printf '\nPackage, matching source bundle and SHA256SUMS: %s\n' "$PACKAGE_DIR"

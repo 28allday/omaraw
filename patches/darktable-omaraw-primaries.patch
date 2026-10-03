@@ -1,0 +1,28 @@
+--- a/src/iop/primaries.c
++++ b/src/iop/primaries.c
+@@ -106,6 +106,25 @@
+   for(size_t i = 0; i < 3; i++)
+     dt_rotate_and_scale_primary(pipe_work_profile,
+                                 scaling[i], rotation[i], i, custom_primaries[i]);
++
++  // OmaRAW: a rotation can place one primary on the edge joining the other
++  // two. That is not an invertible RGB space. The unchecked inverse below
++  // magnifies rounding into million-fold gains and destroys neutral greys.
++  // Compare triangle area with squared edge length, so purity/space scale
++  // does not affect the singularity check. Bypass only this invalid tool.
++  const double ax = (double)custom_primaries[1][0] - custom_primaries[0][0];
++  const double ay = (double)custom_primaries[1][1] - custom_primaries[0][1];
++  const double bx = (double)custom_primaries[2][0] - custom_primaries[0][0];
++  const double by = (double)custom_primaries[2][1] - custom_primaries[0][1];
++  const double area = ax * by - ay * bx;
++  const double edge2 = fmax(ax*ax + ay*ay, fmax(bx*bx + by*by,
++                           (ax-bx)*(ax-bx) + (ay-by)*(ay-by)));
++  if(!isfinite(area) || !isfinite(edge2) || fabs(area) <= 0.00001 * edge2)
++  {
++    memset(matrix, 0, sizeof(dt_colormatrix_t));
++    for(size_t i = 0; i < 3; i++) matrix[i][i] = 1.f;
++    return;
++  }
+ 
+   float whitepoint[2];
+   dt_rotate_and_scale_primary(pipe_work_profile, params->achromatic_tint_purity,

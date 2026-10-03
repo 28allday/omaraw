@@ -1,0 +1,206 @@
+diff -ruN a/src/common/iop_order.c b/src/common/iop_order.c
+--- a/src/common/iop_order.c	2026-09-18 10:39:57.222606079 +0100
++++ b/src/common/iop_order.c	2026-09-18 10:44:12.195798239 +0100
+@@ -161,5 +161,6 @@
+   { {57.0f }, "colorcontrast", 0},
+   { { 57.9f }, "omarawgrade", 0 },
++  { { 57.97f }, "omarawhalation", 0 },
+   { {58.0f }, "colorout", 0},
+   { {59.0f }, "channelmixer", 0},
+   { {60.0f }, "soften", 0},
+@@ -289,5 +290,6 @@
+   { {69.0f }, "colorreconstruct", 0},// try to salvage blown areas before ICC intents in LittleCMS2 do things with them.
+   { { 69.9f }, "omarawgrade", 0 },
++  { { 69.97f }, "omarawhalation", 0 },
+   { {70.0f }, "colorout", 0},
+   { {71.0f }, "clahe", 0},
+   { {72.0f }, "finalscale", 0},
+@@ -412,5 +414,6 @@
+   { {69.4f }, "finalscale", 0},
+   { { 69.9f }, "omarawgrade", 0 },
++  { { 69.97f }, "omarawhalation", 0 },
+   { {70.0f }, "colorout", 0},
+   { {71.0f }, "clahe", 0},
+   { {73.0f }, "overexposed", 0},
+@@ -536,5 +539,6 @@
+                                         // with them.
+   { { 69.9f }, "omarawgrade", 0 },
++  { { 69.97f }, "omarawhalation", 0 },
+   { { 70.0f }, "colorout", 0 },
+   { { 71.0f }, "clahe", 0 },
+   { { 72.0f }, "finalscale", 0 },
+@@ -662,5 +666,6 @@
+   { { 69.5f }, "finalscale", 0 },
+   { { 69.9f }, "omarawgrade", 0 },
++  { { 69.97f }, "omarawhalation", 0 },
+   { { 70.0f }, "colorout", 0 },
+   { { 71.0f }, "clahe", 0 },
+   { { 73.0f }, "overexposed", 0 },
+@@ -756,5 +761,6 @@
+   _insert_before(iop_order_list, "colorbalance", "colorharmonizer");
+   _insert_before(iop_order_list, "colorout", "omarawgrade");
++  _insert_before(iop_order_list, "colorout", "omarawhalation");
+ }
+ 
+ static dt_iop_order_t _ioppr_get_default_iop_order_version(const dt_imgid_t imgid)
+diff -ruN a/src/iop/CMakeLists.txt b/src/iop/CMakeLists.txt
+--- a/src/iop/CMakeLists.txt	2026-09-18 10:39:57.221606013 +0100
++++ b/src/iop/CMakeLists.txt	2026-09-18 10:44:12.194798169 +0100
+@@ -151,5 +151,6 @@
+ add_iop(colorbalancergb "colorbalancergb.c")
+ add_iop(omarawgrade "omarawgrade.c")
++add_iop(omarawhalation "omarawhalation.c")
+ add_iop(cacorrectrgb "cacorrectrgb.c")
+ add_iop(diffuse "diffuse.c")
+ add_iop(blurs "blurs.c")
+diff -ruN a/src/iop/omarawhalation.c b/src/iop/omarawhalation.c
+--- a/src/iop/omarawhalation.c	1970-01-01 01:00:00.000000000 +0100
++++ b/src/iop/omarawhalation.c	2026-09-18 10:44:12.194798169 +0100
+@@ -0,0 +1,147 @@
++// SPDX-License-Identifier: GPL-3.0-or-later
++// OmaRAW halation: the glow a bright area throws around itself when light
++// passes the emulsion, bounces off the film base and exposes it again from
++// behind. Bright parts above a knee are gathered, spread by a box blur, tinted
++// from red towards orange, and added back. Working RGB, before output.
++#include "common/box_filters.h"
++#include "common/imagebuf.h"
++#include "common/math.h"
++#include "common/iop_profile.h"
++#include "develop/imageop.h"
++#include "develop/imageop_math.h"
++#include "develop/tiling.h"
++#include "iop/iop_api.h"
++#include <stdlib.h>
++#include <string.h>
++
++#define HALATION_BOX_ITERATIONS 3
++
++DT_MODULE_INTROSPECTION(1, dt_iop_omarawhalation_params_t)
++
++typedef struct dt_iop_omarawhalation_params_t
++{
++  float strength;  // $MIN: 0.0 $MAX: 100.0 $DEFAULT: 0.0 $DESCRIPTION: "strength"
++  float scatter;   // $MIN: 0.0 $MAX: 100.0 $DEFAULT: 25.0 $DESCRIPTION: "scatter"
++  float dye;       // $MIN: 0.0 $MAX: 100.0 $DEFAULT: 40.0 $DESCRIPTION: "dye transmission"
++  float boost;     // $MIN: 0.0 $MAX: 100.0 $DEFAULT: 60.0 $DESCRIPTION: "boost"
++  float threshold; // $MIN: 0.0 $MAX: 100.0 $DEFAULT: 60.0 $DESCRIPTION: "threshold"
++} dt_iop_omarawhalation_params_t;
++
++typedef struct dt_iop_omarawhalation_data_t
++{
++  float strength, scatter, dye, boost, threshold;
++} dt_iop_omarawhalation_data_t;
++
++const char *name() { return _("halation"); }
++int default_group() { return IOP_GROUP_EFFECT | IOP_GROUP_EFFECTS; }
++int flags() { return IOP_FLAGS_INCLUDE_IN_STYLES | IOP_FLAGS_SUPPORTS_BLENDING | IOP_FLAGS_ALLOW_TILING | IOP_FLAGS_HIDDEN; }
++dt_iop_colorspace_type_t default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe,
++                                          dt_dev_pixelpipe_iop_t *piece) { return IOP_CS_RGB; }
++
++void commit_params(dt_iop_module_t *self, dt_iop_params_t *params, dt_dev_pixelpipe_t *pipe,
++                   dt_dev_pixelpipe_iop_t *piece)
++{
++  const dt_iop_omarawhalation_params_t *p = (const dt_iop_omarawhalation_params_t *)params;
++  dt_iop_omarawhalation_data_t *d = piece->data;
++  d->strength = p->strength; d->scatter = p->scatter; d->dye = p->dye; d->boost = p->boost; d->threshold = p->threshold;
++}
++
++// The blur radius in pipe pixels: scatter is a share of the same 256-pixel
++// reach the engine's glow uses, scaled with the preview.
++static int _radius(const dt_iop_omarawhalation_data_t *d, const dt_iop_roi_t *roi_in, const dt_dev_pixelpipe_iop_t *piece)
++{
++  const float full = 256.0f * (fminf(100.0f, d->scatter) / 100.0f);
++  const float scaled = ceilf(full * roi_in->scale / piece->iscale);
++  return (int)fminf(256.0f, fmaxf(1.0f, scaled));
++}
++
++void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
++             void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
++{
++  const dt_iop_omarawhalation_data_t *const d = piece->data;
++  if(!dt_iop_have_required_input_format(4, self, piece->colors, ivoid, ovoid, roi_in, roi_out)) return;
++  const float *const restrict in = DT_IS_ALIGNED((const float *)ivoid);
++  float *const restrict out = DT_IS_ALIGNED((float *)ovoid);
++  const size_t npixels = (size_t)roi_out->width * roi_out->height;
++  if(d->strength <= 0.0f)
++  {
++    dt_iop_copy_image_roi(ovoid, ivoid, piece->colors, roi_in, roi_out);
++    return;
++  }
++  float *restrict glow;
++  if(!dt_iop_alloc_image_buffers(self, roi_in, roi_out, 1, &glow, 0))
++  {
++    dt_iop_copy_image_roi(ovoid, ivoid, piece->colors, roi_in, roi_out);
++    return;
++  }
++  // Brightness and the halo's colour are both taken in linear Rec. 2020,
++  // whatever the pipe's working space, so the halo is the same in any.
++  float to2020[3][3] = {{1,0,0},{0,1,0},{0,0,1}}, from2020[3][3] = {{1,0,0},{0,1,0},{0,0,1}};
++  const dt_iop_order_iccprofile_info_t *const work = dt_ioppr_get_pipe_current_profile_info(self, piece->pipe);
++  const dt_iop_order_iccprofile_info_t *const rec2020
++      = dt_ioppr_add_profile_info_to_list(self->dev, DT_COLORSPACE_LIN_REC2020, "", DT_INTENT_PERCEPTUAL);
++  const int convert = work && rec2020 && work != rec2020 && isfinite(work->matrix_in[0][0]) && isfinite(work->matrix_out[0][0])
++                      && isfinite(rec2020->matrix_in[0][0]) && isfinite(rec2020->matrix_out[0][0]);
++  if(convert)
++    for(int r = 0; r < 3; r++)
++      for(int c = 0; c < 3; c++)
++      {
++        to2020[r][c] = from2020[r][c] = 0.0f;
++        for(int k = 0; k < 3; k++)
++        {
++          to2020[r][c] += rec2020->matrix_out[r][k] * work->matrix_in[k][c];   // working -> XYZ (D50) -> Rec. 2020
++          from2020[r][c] += work->matrix_out[r][k] * rec2020->matrix_in[k][c]; // and back
++        }
++      }
++  // Gather what is brighter than the knee. 1.0 is diffuse white; the knee
++  // runs from black (0) to white (100).
++  const float knee = d->threshold / 100.0f;
++  DT_OMP_FOR()
++  for(size_t k = 0; k < npixels; k++)
++  {
++    const float *p = in + 4*k;
++    float bright = 0.0f;
++    for(int r = 0; r < 3; r++) bright = fmaxf(bright, to2020[r][0]*p[0] + to2020[r][1]*p[1] + to2020[r][2]*p[2]);
++    glow[k] = fmaxf(0.0f, bright - knee);
++  }
++  const int radius = _radius(d, roi_in, piece);
++  dt_box_mean(glow, roi_out->height, roi_out->width, 1, radius, HALATION_BOX_ITERATIONS);
++  // The halo's colour: red through to orange with dye transmission, and as
++  // saturated as boost asks (0 is a white glow).
++  const float dye = d->dye / 100.0f, boost = d->boost / 100.0f;
++  const float tint[3] = { 1.0f, 0.55f * dye, 0.0f };
++  float colour2020[3], colour[3];
++  for(int c = 0; c < 3; c++) colour2020[c] = 1.0f + boost * (tint[c] - 1.0f);
++  for(int r = 0; r < 3; r++) colour[r] = from2020[r][0]*colour2020[0] + from2020[r][1]*colour2020[1] + from2020[r][2]*colour2020[2];
++  const float strength = d->strength / 100.0f;
++  DT_OMP_FOR()
++  for(size_t k = 0; k < npixels; k++)
++  {
++    const float halo = strength * glow[k];
++    for(int c = 0; c < 3; c++) out[4*k+c] = in[4*k+c] + halo * colour[c];
++    out[4*k+3] = in[4*k+3];
++  }
++  dt_free_align(glow);
++}
++
++void tiling_callback(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const dt_iop_roi_t *roi_in,
++                     const dt_iop_roi_t *roi_out, dt_develop_tiling_t *tiling)
++{
++  const dt_iop_omarawhalation_data_t *d = piece->data;
++  const int radius = _radius(d, roi_in, piece);
++  tiling->factor = 2.0f + 0.25f + 0.05f; // in + out + glow + the box filter's slice
++  tiling->factor_cl = tiling->factor;
++  tiling->maxbuf = 1.0f;
++  tiling->overhead = 0;
++  tiling->overlap = 5 * radius;
++  tiling->align = 1;
++}
++
++void init_pipe(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
++{
++  piece->data = calloc(1, sizeof(dt_iop_omarawhalation_data_t));
++}
++void cleanup_pipe(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
++{
++  free(piece->data); piece->data = NULL;
++}

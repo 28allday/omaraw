@@ -1,0 +1,33 @@
+{
+  "schema": 1,
+  "packages": [
+    "numpy==2.5.3",
+    "Pillow==12.3.0",
+    "onnxruntime==1.30.0",
+    "onnxruntime-ep-webgpu==0.4.0",
+    "tifffile==2026.9.20"
+  ],
+  "models": [
+    {
+      "name": "sam2.encoder.onnx",
+      "bytes": 109471931,
+      "sha256": "3d5ae796097a6afb1198ceea4187ecaa82736242d07f5658541829d6dfc3f871",
+      "url": "https://huggingface.co/nrl-ai/samexporter-onnx-models/resolve/5050a79cd4b912dd745fff83047c4ef6fbd97be5/sam2_1_hiera_tiny/sam2.1_hiera_tiny.encoder.onnx",
+      "license": "Apache-2.0"
+    },
+    {
+      "name": "sam2.decoder.onnx",
+      "bytes": 16519561,
+      "sha256": "197f1c7c8fd070aaf6f15ffc635f4c384422ba5eaa0f8c9e543e3d4b8e0e8e87",
+      "url": "https://huggingface.co/nrl-ai/samexporter-onnx-models/resolve/5050a79cd4b912dd745fff83047c4ef6fbd97be5/sam2_1_hiera_tiny/sam2.1_hiera_tiny.decoder.onnx",
+      "license": "Apache-2.0"
+    },
+    {
+      "name": "lama.onnx",
+      "bytes": 208044816,
+      "sha256": "1faef5301d78db7dda502fe59966957ec4b79dd64e16f03ed96913c7a4eb68d6",
+      "url": "https://huggingface.co/Carve/LaMa-ONNX/resolve/c3c0c9e468934d62e79c329e35d82dd09ff8c444/lama_fp32.onnx",
+      "license": "Apache-2.0"
+    }
+  ]
+}

@@ -1,0 +1,732 @@
+--- a/src/common/omaraw_chain.h
++++ b/src/common/omaraw_chain.h
+@@ -0,0 +1,76 @@
++// OmaRAW optional colour chain ABI 1. A run of consecutive per-pixel modules
++// between demosaic and colorout (exposure, colorin, the implicit Lab-to-RGB
++// step, channelmixerrgb, sigmoid) is described so the application can run
++// it as one resident GPU pass instead of four full-size CPU passes and two
++// colour-space transforms. Registered before any image is processed.
++#pragma once
++#include <string.h>
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++enum
++{
++  DT_OMARAW_CHAIN_EXPOSURE = 1,
++  DT_OMARAW_CHAIN_COLORIN = 2,
++  DT_OMARAW_CHAIN_LAB_TO_RGB = 3,
++  DT_OMARAW_CHAIN_CHANNELMIXER = 4,
++  DT_OMARAW_CHAIN_SIGMOID = 5
++};
++
++// Every matrix is row-major 3x4 with the fourth column unused, as the
++// engine's own OpenCL kernels take them: out.r = m[0]*r + m[1]*g + m[2]*b.
++typedef struct dt_omaraw_chain_stage_t
++{
++  int kind;
++  // exposure: out = (in - black) * scale
++  float black, scale;
++  // colorin: multiply by coeffs unless blue mapping, optional blue mapping,
++  // matrix (camera to XYZ, or to a clipping RGB followed by a clamp to [0,1]
++  // and lmatrix to XYZ), then XYZ to Lab. `corrected` and `d65` carry the
++  // pipe state the module would have set.
++  float coeffs[4];
++  int blue_mapping, clipping, corrected;
++  float d65[4];
++  float matrix[12];
++  float lmatrix[12];
++  // lab_to_rgb: Lab to XYZ then `matrix` (the work profile's XYZ to RGB)
++  // channelmixer: darktable's channelmixerrgb kernels, argument for argument
++  int adaptation, version, clip, apply_grey;
++  float rgb_to_xyz[12], xyz_to_rgb[12], mix[12];
++  float illuminant[4], saturation[4], lightness[4], grey[4];
++  float p, gamut;
++  // sigmoid: method 0 per channel (with the three primaries matrices),
++  // 1 RGB ratio
++  int method;
++  float white_target, black_target, paper_exposure, film_fog, film_power, paper_power, hue_preservation;
++  float pipe_to_base[12], base_to_rendering[12], rendering_to_pipe[12];
++} dt_omaraw_chain_stage_t;
++
++// Negative cpu_ms attempts the GPU; positive offers a completed native
++// reference and its time. Return 1 only when output was supplied or the
++// request was cancelled. `cancelled` may be polled with `request`.
++typedef int (*dt_omaraw_chain_callback)(const dt_omaraw_chain_stage_t *stages, int count,
++                                        const float *input, float *output, int width, int height,
++                                        double cpu_ms, int (*cancelled)(void *), void *request);
++extern dt_omaraw_chain_callback dt_omaraw_chain;
++void dt_omaraw_set_chain(dt_omaraw_chain_callback callback);
++
++// Each chain module exports `omaraw_chain_describe` from its plugin: fill the
++// stage from the committed piece, or return 0 when the current parameters
++// have no chain equivalent and the module must run natively.
++struct dt_iop_module_t;
++struct dt_dev_pixelpipe_iop_t;
++typedef int (*dt_omaraw_chain_describe_fn)(struct dt_iop_module_t *self,
++                                           struct dt_dev_pixelpipe_iop_t *piece,
++                                           dt_omaraw_chain_stage_t *stage);
++
++static inline void dt_omaraw_chain_copy_matrix(float out[12], const float in[4][4])
++{
++  for(int r = 0; r < 3; r++)
++    for(int c = 0; c < 4; c++) out[r * 4 + c] = in[r][c];
++}
++
++#ifdef __cplusplus
++}
++#endif
+--- a/src/develop/imageop.h
++++ b/src/develop/imageop.h
+@@ -138,6 +138,8 @@
+ };
+ 
+ /** part of the module which only contains the cached dlopen stuff. */
++// OmaRAW colour chain stage, see common/omaraw_chain.h.
++struct dt_omaraw_chain_stage_t;
+ typedef struct dt_iop_module_so_t
+ {
+   dt_action_t actions; // !!! NEEDS to be FIRST (to be able to cast convert)
+--- a/src/iop/iop_api.h
++++ b/src/iop/iop_api.h
+@@ -44,6 +44,7 @@
+ struct dt_develop_tiling_t;
+ struct dt_iop_buffer_dsc_t;
+ struct _GtkWidget;
++struct dt_omaraw_chain_stage_t;
+ 
+ #ifndef DT_IOP_PARAMS_T
+ #define DT_IOP_PARAMS_T
+@@ -304,6 +305,13 @@
+                                          struct dt_dev_pixelpipe_iop_t *piece,
+                                          float *points,
+                                          size_t points_count);
++/** OmaRAW colour chain: describe the committed piece as one per-pixel
++ * stage for the application's resident GPU pass, or return 0 to keep the
++ * native path. See common/omaraw_chain.h. */
++OPTIONAL(int, omaraw_chain_describe, struct dt_iop_module_t *self,
++         struct dt_dev_pixelpipe_iop_t *piece,
++         struct dt_omaraw_chain_stage_t *stage);
++
+ OPTIONAL(void, distort_mask, struct dt_iop_module_t *self,
+                              struct dt_dev_pixelpipe_iop_t *piece,
+                              const float *const in,
+--- a/src/develop/pixelpipe_hb.h
++++ b/src/develop/pixelpipe_hb.h
+@@ -276,6 +276,10 @@
+ 
+ struct dt_develop_t;
+ 
++// OmaRAW: see pixelpipe_hb.c. Set only around on-screen renders.
++void dt_omaraw_set_approx_demosaic(gboolean on);
++gboolean dt_omaraw_approx_demosaic(void);
++
+ static inline gboolean dt_pipe_is_fast(const dt_dev_pixelpipe_t *pipe)
+ {
+   return (pipe->type & DT_DEV_PIXELPIPE_FAST);
+--- a/src/develop/pixelpipe_hb.c
++++ b/src/develop/pixelpipe_hb.c
+@@ -25,6 +25,18 @@
+ #include "control/control.h"
+ #include "control/signal.h"
+ #include "develop/blend.h"
++#include "common/omaraw_chain.h"
++
++// OmaRAW: approximate demosaicing for a strongly downscaled preview. The
++// application sets this around on-screen renders only; exports leave it
++// clear. It cannot be a pipe flag, because
++// dt_dev_pixelpipe_process recomputes DT_DEV_PIXELPIPE_FAST from the GUI
++// module on every run and clears it when there is none.
++static gboolean _omaraw_approx_demosaic = FALSE;
++void dt_omaraw_set_approx_demosaic(gboolean on) { _omaraw_approx_demosaic = on; }
++gboolean dt_omaraw_approx_demosaic(void) { return _omaraw_approx_demosaic; }
++dt_omaraw_chain_callback dt_omaraw_chain = NULL;
++void dt_omaraw_set_chain(dt_omaraw_chain_callback callback) { dt_omaraw_chain = callback; }
+ #include "develop/format.h"
+ #include "develop/imageop_math.h"
+ #include "develop/develop.h"
+@@ -747,6 +759,15 @@
+   }
+ }
+ 
++// OmaRAW: see dt_dev_pixelpipe_synch_all.
++static gboolean _omaraw_module_in_history(const dt_develop_t *dev, const dt_iop_module_t *module)
++{
++  GList *history = dev->history;
++  for(int k = 0; k < dev->history_end && history; k++, history = g_list_next(history))
++    if(((const dt_dev_history_item_t *)history->data)->module == module) return TRUE;
++  return FALSE;
++}
++
+ void dt_dev_pixelpipe_synch_all(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
+ {
+   dt_pthread_mutex_lock(&pipe->busy_mutex);
+@@ -763,6 +784,12 @@
+     dt_dev_pixelpipe_iop_t *piece = nodes->data;
+     piece->hash = DT_INVALID_HASH;
+     piece->enabled = piece->module->default_enabled;
++    // OmaRAW: a module that is neither enabled by default nor in the applied
++    // history is never run by this pipe, so committing its defaults only
++    // costs time — several build lookup tables, about 190 ms over the whole
++    // module list on every synch. Its first history item commits it below.
++    if(!piece->module->default_enabled && !_omaraw_module_in_history(dev, piece->module))
++      continue;
+     dt_iop_commit_params(piece->module,
+                          piece->module->default_params,
+                          piece->module->default_blendop_params,
+@@ -1943,6 +1970,226 @@
+                                            GList *modules,
+                                            GList *pieces,
+                                            const int pos)
++;
++
++/* OmaRAW colour chain. A run of consecutive enabled per-pixel modules ending
++   at the module being processed is handed to the application as one job:
++   on the GPU it is a single resident pass, and when the application
++   declines the run is processed natively here, stage by stage, and offered
++   back with its time so the application can qualify its GPU path. */
++#define OMARAW_CHAIN_MAX 8
++
++static gboolean _omaraw_chain_candidate(const dt_iop_module_t *module,
++                                        const dt_dev_pixelpipe_iop_t *piece)
++{
++  const char *op = module->op;
++  if(strcmp(op, "exposure") && strcmp(op, "colorin")
++     && strcmp(op, "channelmixerrgb") && strcmp(op, "sigmoid"))
++    return FALSE;
++  const dt_develop_blend_params_t *blend = piece->blendop_data;
++  if(blend && blend->mask_mode != DEVELOP_MASK_DISABLED) return FALSE;
++  if(piece->request_histogram & DT_REQUEST_ON) return FALSE;
++  return piece->colors == 4;
++}
++
++static int _omaraw_chain_cancelled(void *request)
++{
++  return _pipe_has_shutdown((dt_dev_pixelpipe_t *)request);
++}
++
++static void _omaraw_chain_side_effects(dt_dev_pixelpipe_t *pipe,
++                                       const dt_omaraw_chain_stage_t *stages,
++                                       const int count)
++{
++  for(int i = 0; i < count; i++)
++  {
++    const dt_omaraw_chain_stage_t *s = &stages[i];
++    if(s->kind == DT_OMARAW_CHAIN_EXPOSURE)
++      for(int k = 0; k < 3; k++) pipe->dsc.processed_maximum[k] *= s->scale;
++    else if(s->kind == DT_OMARAW_CHAIN_COLORIN && s->corrected)
++      for(int k = 0; k < 4; k++)
++      {
++        pipe->dsc.temperature.coeffs[k] = s->d65[k];
++        pipe->dsc.processed_maximum[k] *= s->coeffs[k];
++      }
++  }
++}
++
++// The run processed natively, in the order and with the calls the normal
++// path would make, into `out`. Returns TRUE on a shutdown.
++static gboolean _omaraw_chain_native(dt_dev_pixelpipe_t *pipe,
++                                     GList *first_modules,
++                                     GList *first_pieces,
++                                     GList *last_modules,
++                                     const float *input,
++                                     float *out,
++                                     const dt_iop_roi_t *roi_in,
++                                     const dt_iop_roi_t *roi_out,
++                                     const dt_iop_order_iccprofile_info_t *work_profile,
++                                     const int count)
++{
++  const int w = roi_out->width, h = roi_out->height;
++  float *tmp = count >= 2 ? dt_iop_image_alloc(w, h, 4) : NULL;
++  if(count >= 2 && !tmp) return TRUE;
++  const float *src = input;
++  float *dst = (count & 1) ? out : tmp;
++  dt_iop_colorspace_type_t cst = pipe->dsc.cst;
++  gboolean stop = FALSE;
++  GList *lm = first_modules, *lp = first_pieces;
++  for(;;)
++  {
++    dt_iop_module_t *mod = lm->data;
++    dt_dev_pixelpipe_iop_t *pie = lp->data;
++    if(!_skip_piece_on_tags(pie))
++    {
++      const dt_iop_colorspace_type_t cst_to = mod->input_colorspace(mod, pipe, pie);
++      if(cst != cst_to)
++      {
++        dt_times_t start;
++        dt_get_perf_times(&start);
++        dt_ioppr_transform_image_colorspace(mod, src, dst, w, h, cst, cst_to, &cst, work_profile);
++        dt_show_times_f(&start, "[dev_pixelpipe]", "[%s] processed colorspace %s chain step on CPU",
++                        dt_dev_pixelpipe_type_to_str(pipe->type), mod->op);
++        src = dst; dst = (dst == tmp) ? out : tmp;
++      }
++      dt_times_t start;
++      dt_get_perf_times(&start);
++      mod->process(mod, pie, src, dst, roi_in, roi_out);
++      dt_show_times_f(&start, "[dev_pixelpipe]", "[%s] processed `%s' chain step on CPU",
++                      dt_dev_pixelpipe_type_to_str(pipe->type), mod->op);
++      cst = mod->output_colorspace(mod, pipe, pie);
++      pipe->dsc.cst = cst;
++      if(_module_pipe_stop(pipe, mod, dst) != DT_DEV_PIXELPIPE_STOP_NO) { stop = TRUE; break; }
++      src = dst; dst = (dst == tmp) ? out : tmp;
++    }
++    if(lm == last_modules) break;
++    lm = g_list_next(lm); lp = g_list_next(lp);
++  }
++  dt_free_align(tmp);
++  return stop;
++}
++
++// 1: handled, output filled. 0: not a chain here, continue normally.
++// -1: the pipe was shut down.
++static int _omaraw_chain_process(dt_dev_pixelpipe_t *pipe,
++                                 dt_develop_t *dev,
++                                 void **output,
++                                 void **cl_mem_output,
++                                 dt_iop_buffer_dsc_t **out_format,
++                                 const dt_iop_roi_t *roi_out,
++                                 GList *modules,
++                                 GList *pieces,
++                                 const int pos,
++                                 const dt_hash_t hash,
++                                 const size_t bufsize)
++{
++  if(!dt_omaraw_chain || !modules || !dt_pipe_no_mask_display(pipe)) return 0;
++  // Collect the run backwards from the module being processed.
++  GList *first_modules = NULL, *first_pieces = NULL;
++  int count = 0;
++  for(GList *m = modules, *pc = pieces; m; m = g_list_previous(m), pc = g_list_previous(pc))
++  {
++    dt_dev_pixelpipe_iop_t *pie = pc->data;
++    if(_skip_piece_on_tags(pie)) continue;
++    if(!_omaraw_chain_candidate(m->data, pie)) break;
++    first_modules = m; first_pieces = pc; ++count;
++    if(count >= OMARAW_CHAIN_MAX) break;
++  }
++  if(!count) return 0;
++  int first_pos = pos;
++  for(GList *m = modules; m != first_modules; m = g_list_previous(m)) --first_pos;
++  dt_iop_roi_t roi_in = *roi_out; // every stage is per-pixel
++  void *input = NULL, *cl_mem_input = NULL;
++  dt_iop_buffer_dsc_t _input_format = { 0 };
++  dt_iop_buffer_dsc_t *input_format = &_input_format;
++  if(_dev_pixelpipe_process_rec(pipe, dev, &input, &cl_mem_input, &input_format, &roi_in,
++                                g_list_previous(first_modules), g_list_previous(first_pieces), first_pos - 1))
++    return -1;
++  if(_pipe_has_shutdown(pipe)) return -1;
++  if(cl_mem_input || !input || input_format->cst == IOP_CS_RAW
++     || input_format->channels != 4 || input_format->datatype != TYPE_FLOAT)
++    return 0;
++  const dt_iop_order_iccprofile_info_t *work_profile = dt_ioppr_get_pipe_work_profile_info(pipe);
++  dt_omaraw_chain_stage_t stages[OMARAW_CHAIN_MAX * 2];
++  int n = 0;
++  dt_iop_colorspace_type_t cst = input_format->cst;
++  dt_iop_buffer_dsc_t dsc = *input_format;
++  for(GList *lm = first_modules, *lp = first_pieces;; lm = g_list_next(lm), lp = g_list_next(lp))
++  {
++    dt_iop_module_t *mod = lm->data;
++    dt_dev_pixelpipe_iop_t *pie = lp->data;
++    if(!_skip_piece_on_tags(pie))
++    {
++      const dt_iop_colorspace_type_t cst_to = mod->input_colorspace(mod, pipe, pie);
++      if(cst != cst_to)
++      {
++        if(cst != IOP_CS_LAB || cst_to != IOP_CS_RGB || !work_profile || work_profile->nonlinearlut
++           || !dt_is_valid_colormatrix(work_profile->matrix_out[0][0]))
++          return 0;
++        memset(&stages[n], 0, sizeof stages[n]);
++        stages[n].kind = DT_OMARAW_CHAIN_LAB_TO_RGB;
++        dt_omaraw_chain_copy_matrix(stages[n].matrix, work_profile->matrix_out);
++        ++n;
++        cst = cst_to;
++      }
++      if(!mod->omaraw_chain_describe) return 0;
++      // The chain runs whole images; leave anything darktable would tile to it.
++      dt_develop_tiling_t tiling = { .factor = 2.0f, .factor_cl = 2.0f, .maxbuf = 1.0f, .maxbuf_cl = 1.0f,
++                                     .overhead = 0, .overlap = 0, .align = 1 };
++      mod->tiling_callback(mod, pie, &roi_in, roi_out, &tiling);
++      if(!dt_tiling_piece_fits_host_memory(pie, roi_out->width, roi_out->height, 16, tiling.factor, tiling.overhead))
++        return 0;
++      pie->dsc_in = dsc;
++      pie->dsc_out = dsc;
++      mod->output_format(mod, pipe, pie, &pie->dsc_out);
++      dsc = pie->dsc_out;
++      pie->processed_roi_in = roi_in;
++      pie->processed_roi_out = *roi_out;
++      memset(&stages[n], 0, sizeof stages[n]);
++      if(!mod->omaraw_chain_describe(mod, pie, &stages[n])) return 0;
++      ++n;
++      cst = mod->output_colorspace(mod, pipe, pie);
++    }
++    if(lm == modules) break;
++  }
++  dt_iop_module_t *module = modules->data;
++  **out_format = pipe->dsc = dsc;
++  pipe->dsc.cst = input_format->cst;
++  const gboolean important_out = dt_pipe_is_screen(pipe) && (module->flags() & IOP_FLAGS_WRITE_PIPECACHE);
++  dt_dev_pixelpipe_cache_get(pipe, hash, bufsize, output, out_format, module, important_out);
++  *cl_mem_output = NULL;
++  const int w = roi_out->width, h = roi_out->height;
++  dt_times_t start;
++  dt_get_perf_times(&start);
++  const int done = dt_omaraw_chain(stages, n, (const float *)input, (float *)*output, w, h, -1.0,
++                                   _omaraw_chain_cancelled, pipe);
++  if(_pipe_has_shutdown(pipe)) return -1;
++  if(done)
++  {
++    _omaraw_chain_side_effects(pipe, stages, n);
++    pipe->dsc.cst = cst;
++    dt_show_times_f(&start, "[dev_pixelpipe]", "[%s] processed `%s' chain of %d on OmaRAW GPU",
++                    dt_dev_pixelpipe_type_to_str(pipe->type), module->op, n);
++    return 1;
++  }
++  if(_omaraw_chain_native(pipe, first_modules, first_pieces, modules, (const float *)input,
++                          (float *)*output, &roi_in, roi_out, work_profile, n))
++    return -1;
++  const double native_ms = dt_get_lap_time(&start.clock) * 1000.0;
++  dt_omaraw_chain(stages, n, (const float *)input, (float *)*output, w, h, native_ms,
++                  _omaraw_chain_cancelled, pipe);
++  return _pipe_has_shutdown(pipe) ? -1 : 1;
++}
++
++static gboolean _dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe,
++                                           dt_develop_t *dev,
++                                           void **output,
++                                           void **cl_mem_output,
++                                           dt_iop_buffer_dsc_t **out_format,
++                                           const dt_iop_roi_t *roi_out,
++                                           GList *modules,
++                                           GList *pieces,
++                                           const int pos)
+ {
+   dt_iop_roi_t roi_in = *roi_out;
+ 
+@@ -2183,6 +2430,14 @@
+     return FALSE;
+   }
+ 
++  // OmaRAW: a run of per-pixel modules ending here may be one job.
++  {
++    const int chained = _omaraw_chain_process(pipe, dev, output, cl_mem_output, out_format,
++                                              roi_out, modules, pieces, pos, hash, bufsize);
++    if(chained > 0) return FALSE;
++    if(chained < 0) return TRUE;
++  }
++
+   // 3b) still recurse from end of list to first, obtain output array in &input
+ 
+   // get region of interest which is needed in input
+--- a/src/iop/demosaic.c
++++ b/src/iop/demosaic.c
+@@ -283,6 +283,15 @@
+   if(dt_pipe_is_preview(piece->pipe))
+     return roi_out->scale > (piece->pipe->dsc.filters == 9u ? 0.667f : 0.5f);
+ 
++  // OmaRAW: on-screen renders run on the export pipe, so that what is shown
++  // while editing is produced like what is written to disk. When the
++  // application marks a render as on-screen, let it reach the same
++  // approximate interpolator darktable uses for its own preview, on
++  // darktable's own scale rule: at half size and above it still demosaics
++  // in full. Exports never set it.
++  if(dt_omaraw_approx_demosaic())
++    return roi_out->scale > (piece->pipe->dsc.filters == 9u ? 0.667f : 0.5f);
++
+   return TRUE;
+ }
+ 
+--- a/src/common/mipmap_cache.c
++++ b/src/common/mipmap_cache.c
+@@ -741,7 +741,12 @@
+      - be enough for current 50mpix images for positioning precision
+      - also work on CPU bound preview pipes
+   */
+-  const dt_mipmap_size_t prev_mip = dt_conf_get_bool("highres_preview_mip") ? DT_MIPMAP_4 : DT_MIPMAP_3;
++  // OmaRAW: the application chooses the reduced mosaic's size, so a fitted
++  // view on a large display is still served from it (see bridge.c).
++  const int omaraw_mip = dt_conf_key_exists("omaraw_preview_mip") ? dt_conf_get_int("omaraw_preview_mip") : 0;
++  const dt_mipmap_size_t prev_mip = omaraw_mip >= DT_MIPMAP_1 && omaraw_mip <= DT_MIPMAP_8
++    ? (dt_mipmap_size_t)omaraw_mip
++    : dt_conf_get_bool("highres_preview_mip") ? DT_MIPMAP_4 : DT_MIPMAP_3;
+   cache->max_width[DT_MIPMAP_F] = mipsizes[prev_mip][0];
+   cache->max_height[DT_MIPMAP_F] = mipsizes[prev_mip][1];
+   for(int k = DT_MIPMAP_LDR_MAX; k >= 0; k--)
+--- a/src/iop/exposure.c
++++ b/src/iop/exposure.c
+@@ -29,6 +29,7 @@
+ #include "control/control.h"
+ #include "develop/develop.h"
+ #include "develop/imageop.h"
++#include "common/omaraw_chain.h"
+ #include "develop/imageop_math.h"
+ #include "develop/imageop_gui.h"
+ #include "develop/pixelpipe.h"
+@@ -1356,6 +1357,22 @@
+   g_idle_remove_by_data(self);
+ }
+ 
++
++// OmaRAW colour chain: the per-pixel exposure as one stage. Deflicker needs
++// the histogram and stays native.
++int omaraw_chain_describe(dt_iop_module_t *self,
++                          dt_dev_pixelpipe_iop_t *piece,
++                          dt_omaraw_chain_stage_t *stage)
++{
++  dt_iop_exposure_data_t *d = piece->data;
++  if(d->deflicker || piece->colors != 4) return 0;
++  _process_common_setup(self, piece);
++  stage->kind = DT_OMARAW_CHAIN_EXPOSURE;
++  stage->black = d->black;
++  stage->scale = d->scale;
++  return 1;
++}
++
+ // clang-format off
+ // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
+ // vim: shiftwidth=2 expandtab tabstop=2 cindent
+--- a/src/iop/colorin.c
++++ b/src/iop/colorin.c
+@@ -17,6 +17,7 @@
+ */
+ 
+ #include "common/omaraw_ocio.h"
++#include "common/omaraw_chain.h"
+ #include "bauhaus/bauhaus.h"
+ #include "common/imagebuf.h"
+ #include "common/iop_profile.h"
+@@ -2136,6 +2137,38 @@
+   }
+ }
+ 
++
++// OmaRAW colour chain: the matrix input profile as one stage, exactly the
++// OCIO-adapter path of process(). Profiles with shaper curves or without a
++// matrix stay native.
++int omaraw_chain_describe(dt_iop_module_t *self,
++                          dt_dev_pixelpipe_iop_t *piece,
++                          dt_omaraw_chain_stage_t *stage)
++{
++  const dt_iop_colorin_data_t *const d = piece->data;
++  dt_dev_pixelpipe_t *pipe = piece->pipe;
++  if(!dt_omaraw_ocio_transform || piece->colors != 4 || d->type == DT_COLORSPACE_LAB
++     || !dt_is_valid_colormatrix(d->cmatrix[0][0]) || d->nonlinearlut)
++    return 0;
++  for(int c = 0; c < 3; c++)
++    if(d->lut[c][0] >= 0.0f) return 0;
++  if(d->nrgb && !dt_is_valid_colormatrix(d->nmatrix[0][0])) return 0;
++  const dt_dev_chroma_t *chr = &self->dev->chroma;
++  const gboolean corrected = chr->late_correction && d->type != DT_COLORSPACE_LAB;
++  stage->kind = DT_OMARAW_CHAIN_COLORIN;
++  stage->corrected = corrected;
++  for(int k = 0; k < 4; k++)
++  {
++    stage->coeffs[k] = corrected ? chr->D65coeffs[k] / chr->as_shot[k] : 1.0f;
++    stage->d65[k] = chr->D65coeffs[k];
++  }
++  stage->blue_mapping = d->blue_mapping && dt_image_is_matrix_correction_supported(&pipe->image);
++  stage->clipping = d->nrgb != NULL;
++  dt_omaraw_chain_copy_matrix(stage->matrix, d->nrgb ? d->nmatrix : d->cmatrix);
++  if(d->nrgb) dt_omaraw_chain_copy_matrix(stage->lmatrix, d->lmatrix);
++  return 1;
++}
++
+ // clang-format off
+ // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
+ // vim: shiftwidth=2 expandtab tabstop=2 cindent
+--- a/src/iop/channelmixerrgb.c
++++ b/src/iop/channelmixerrgb.c
+@@ -44,6 +44,7 @@
+ #include "dtgtk/drawingarea.h"
+ #include "common/chromatic_adaptation.h"
+ #include "common/colorspaces_inline_conversions.h"
++#include "common/omaraw_chain.h"
+ #include "common/colorchecker.h"
+ #include "common/opencl.h"
+ #include "common/illuminants.h"
+@@ -4771,6 +4772,56 @@
+ 
+   g_free(g->delta_E_label_text);
+ }
++
++// OmaRAW colour chain: the kernel arguments process_cl() would pass, after
++// the same runtime camera-illuminant update process() makes.
++int omaraw_chain_describe(dt_iop_module_t *self,
++                          dt_dev_pixelpipe_iop_t *piece,
++                          dt_omaraw_chain_stage_t *stage)
++{
++  dt_iop_channelmixer_rbg_data_t *const d = piece->data;
++  const dt_iop_order_iccprofile_info_t *const work_profile =
++    dt_ioppr_get_pipe_current_profile_info(self, piece->pipe);
++  if(!work_profile || piece->colors != 4 || (self->dev->gui_attached && self->gui_data))
++    return 0;
++  if(!dt_is_valid_colormatrix(work_profile->matrix_in[0][0])
++     || !dt_is_valid_colormatrix(work_profile->matrix_out[0][0]))
++    return 0;
++  if(dt_pipe_is_preview(piece->pipe))
++    _declare_cat_on_pipe(self, FALSE);
++  if(d->illuminant_type == DT_ILLUMINANT_CAMERA)
++  {
++    float x, y;
++    dt_aligned_pixel_t custom_wb;
++    _get_white_balance_coeff(self, custom_wb);
++    if(find_temperature_from_raw_coeffs(&(self->dev->image_storage), custom_wb, &(x), &(y)))
++    {
++      dt_aligned_pixel_t XYZ;
++      illuminant_xy_to_XYZ(x, y, XYZ);
++      convert_any_XYZ_to_LMS(XYZ, d->illuminant, d->adaptation);
++      d->illuminant[3] = 0.f;
++    }
++  }
++  stage->kind = DT_OMARAW_CHAIN_CHANNELMIXER;
++  stage->adaptation = d->adaptation;
++  stage->version = d->version;
++  stage->clip = d->clip;
++  stage->apply_grey = d->apply_grey;
++  stage->p = d->p;
++  stage->gamut = d->gamut;
++  dt_omaraw_chain_copy_matrix(stage->rgb_to_xyz, work_profile->matrix_in);
++  dt_omaraw_chain_copy_matrix(stage->xyz_to_rgb, work_profile->matrix_out);
++  dt_omaraw_chain_copy_matrix(stage->mix, d->MIX);
++  for(int k = 0; k < 4; k++)
++  {
++    stage->illuminant[k] = d->illuminant[k];
++    stage->saturation[k] = d->saturation[k];
++    stage->lightness[k] = d->lightness[k];
++    stage->grey[k] = d->grey[k];
++  }
++  return 1;
++}
++
+ // clang-format off
+ // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
+ // vim: shiftwidth=2 expandtab tabstop=2 cindent
+--- a/src/iop/sigmoid.c
++++ b/src/iop/sigmoid.c
+@@ -22,6 +22,7 @@
+ #include "common/matrices.h"
+ #include "common/dttypes.h"
+ #include "develop/imageop.h"
++#include "common/omaraw_chain.h"
+ #include "develop/imageop_gui.h"
+ #include "develop/openmp_maths.h"
+ #include "gui/gtk.h"
+@@ -975,6 +976,42 @@
+ }
+ 
+ 
++
++// OmaRAW colour chain: the kernel arguments process_cl() would pass.
++int omaraw_chain_describe(dt_iop_module_t *self,
++                          dt_dev_pixelpipe_iop_t *piece,
++                          dt_omaraw_chain_stage_t *stage)
++{
++  const dt_iop_sigmoid_data_t *const d = piece->data;
++  if(piece->colors != 4) return 0;
++  stage->kind = DT_OMARAW_CHAIN_SIGMOID;
++  stage->method = d->color_processing == DT_SIGMOID_METHOD_PER_CHANNEL ? 0 : 1;
++  stage->white_target = d->white_target;
++  stage->black_target = d->black_target;
++  stage->paper_exposure = d->paper_exposure;
++  stage->film_fog = d->film_fog;
++  stage->film_power = d->film_power;
++  stage->paper_power = d->paper_power;
++  stage->hue_preservation = d->hue_preservation;
++  if(stage->method == 0)
++  {
++    const dt_iop_order_iccprofile_info_t *pipe_work_profile = dt_ioppr_get_pipe_work_profile_info(piece->pipe);
++    const dt_iop_order_iccprofile_info_t *base_profile = _get_base_profile(self->dev, pipe_work_profile, d->base_primaries);
++    if(!pipe_work_profile || !base_profile) return 0;
++    dt_colormatrix_t pipe_to_base_transposed, base_to_rendering_transposed, rendering_to_pipe_transposed;
++    dt_colormatrix_t pipe_to_base, base_to_rendering, rendering_to_pipe;
++    _calculate_adjusted_primaries(d, pipe_work_profile, base_profile, pipe_to_base_transposed,
++                                  base_to_rendering_transposed, rendering_to_pipe_transposed);
++    transpose_3xSSE(pipe_to_base_transposed, pipe_to_base);
++    transpose_3xSSE(base_to_rendering_transposed, base_to_rendering);
++    transpose_3xSSE(rendering_to_pipe_transposed, rendering_to_pipe);
++    dt_omaraw_chain_copy_matrix(stage->pipe_to_base, pipe_to_base);
++    dt_omaraw_chain_copy_matrix(stage->base_to_rendering, base_to_rendering);
++    dt_omaraw_chain_copy_matrix(stage->rendering_to_pipe, rendering_to_pipe);
++  }
++  return 1;
++}
++
+ // clang-format off
+ // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
+ // vim: shiftwidth=2 expandtab tabstop=2 cindent
+--- a/src/imageio/imageio_common.h
++++ b/src/imageio/imageio_common.h
+@@ -104,6 +104,13 @@
+                       const int total,
+                       dt_export_metadata_t *metadata);
+ 
++/* OmaRAW: output finishing on the float pixels of an export, once, before
++ * the down-conversion for the writer. The application sets it around one
++ * export and clears it after; NULL when unused. */
++typedef void (*dt_omaraw_export_hook_t)(float *rgba, int width, int height, int bpp, void *data);
++extern dt_omaraw_export_hook_t dt_omaraw_export_hook;
++extern void *dt_omaraw_export_hook_data;
++
+ gboolean dt_imageio_export_with_flags(const dt_imgid_t imgid, const char *filename,
+                                  struct dt_imageio_module_format_t *format,
+                                  struct dt_imageio_module_data_t *format_params,
+--- a/src/imageio/imageio.c
++++ b/src/imageio/imageio.c
+@@ -1039,6 +1039,10 @@
+   return fmin(scalex, scaley);
+ }
+ 
++// OmaRAW: see imageio_common.h
++dt_omaraw_export_hook_t dt_omaraw_export_hook = NULL;
++void *dt_omaraw_export_hook_data = NULL;
++
+ // internal function: to avoid exif blob reading + 8-bit byteorder
+ // flag + high-quality override
+ gboolean dt_imageio_export_with_flags(const dt_imgid_t imgid,
+@@ -1335,6 +1339,9 @@
+ 
+   dt_get_perf_times(&start);
+   const gboolean hq_process = high_quality_processing || scale > 1.0f;
++  // OmaRAW: a finished export needs the float output whatever its depth;
++  // the pipe still downsamples early when high quality was not asked for.
++  const gboolean want_float = hq_process || (dt_omaraw_export_hook && !thumbnail_export);
+   if(hq_process)
+   {
+     /*
+@@ -1370,7 +1377,7 @@
+ 
+     // do the processing (8-bit with special treatment, to make sure
+     // we can use openmp further down):
+-    if(bpp == 8)
++    if(bpp == 8 && !want_float)
+       dt_dev_pixelpipe_process(&pipe, &dev, 0, 0,
+                                processed_width, processed_height, scale, DT_DEVICE_NONE);
+     else
+@@ -1392,12 +1399,18 @@
+     goto error;
+   }
+ 
++  // OmaRAW: finishing on the float output before any quantisation; a
++  // thumbnail is never finished.
++  if(want_float && dt_omaraw_export_hook && !thumbnail_export)
++    dt_omaraw_export_hook((float *)outbuf, processed_width, processed_height, bpp,
++                          dt_omaraw_export_hook_data);
++
+   // downconversion to low-precision formats:
+   if(bpp == 8)
+   {
+     if(display_byteorder)
+     {
+-      if(hq_process)
++      if(want_float)
+       {
+         const float *const inbuf = (float *)outbuf;
+         for(size_t k = 0; k < (size_t)processed_width * processed_height; k++)
+@@ -1416,7 +1429,7 @@
+     else // need to flip
+     {
+       // ldr output: char
+-      if(hq_process)
++      if(want_float)
+       {
+         const float *const inbuf = (float *)outbuf;
+         for(size_t k = 0; k < (size_t)processed_width * processed_height; k++)

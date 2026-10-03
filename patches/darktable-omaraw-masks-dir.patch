@@ -1,0 +1,56 @@
+diff -ruN a/src/common/database.c b/src/common/database.c
+--- a/src/common/database.c	2026-09-18 10:33:26.160962398 +0100
++++ b/src/common/database.c	2026-09-18 10:36:38.042543539 +0100
+@@ -4925,6 +4925,17 @@
+   return db->dbfilename_library;
+ }
+ 
++static gchar *_omaraw_masks_dir = NULL;
++const char *dt_omaraw_masks_dir(void)
++{
++  return _omaraw_masks_dir;
++}
++void dt_omaraw_set_masks_dir(const char *dir)
++{
++  g_free(_omaraw_masks_dir);
++  _omaraw_masks_dir = dir && *dir ? g_strdup(dir) : NULL;
++}
++
+ static void _database_migrate_to_xdg_structure()
+ {
+   gchar *conf_db = dt_conf_get_string("database");
+diff -ruN a/src/common/database.h b/src/common/database.h
+--- a/src/common/database.h	2026-09-18 10:33:26.160962398 +0100
++++ b/src/common/database.h	2026-09-18 10:36:38.042543539 +0100
+@@ -35,6 +35,10 @@
+ struct sqlite3 *dt_database_get(const struct dt_database_t *);
+ /** Returns database path */
+ const gchar *dt_database_get_path(const struct dt_database_t *db);
++// Where OmaRAW keeps its content-addressed masks, when a service has said;
++// NULL means beside the library. Set from the OmaRAW bridge.
++const char *dt_omaraw_masks_dir(void);
++void dt_omaraw_set_masks_dir(const char *dir);
+ /** test if database was already locked by another instance */
+ gboolean dt_database_get_lock_acquired(const struct dt_database_t *db);
+ /** show an error popup. this has to be postponed until after we tried
+diff -ruN a/src/iop/rasterfile.c b/src/iop/rasterfile.c
+--- a/src/iop/rasterfile.c	2026-09-18 10:33:05.404601671 +0100
++++ b/src/iop/rasterfile.c	2026-09-18 10:36:38.041543474 +0100
+@@ -615,10 +615,14 @@
+   for(int i = 0; managed && i < 64; ++i)
+     managed = (p->file[i] >= '0' && p->file[i] <= '9')
+            || (p->file[i] >= 'a' && p->file[i] <= 'f');
+-  if(managed && darktable.db)
++  // The service that owns the masks says where they are (it may not be the
++  // one that started the engine); otherwise beside the engine's library.
++  const char *masks_dir = dt_omaraw_masks_dir();
++  if(managed && (masks_dir || darktable.db))
+   {
+-    gchar *library = g_path_get_dirname(dt_database_get_path(darktable.db));
+-    gchar *local = g_build_filename(library, "masks", p->file, NULL);
++    gchar *library = masks_dir ? NULL : g_path_get_dirname(dt_database_get_path(darktable.db));
++    gchar *local = masks_dir ? g_build_filename(masks_dir, p->file, NULL)
++                             : g_build_filename(library, "masks", p->file, NULL);
+     if(g_file_test(local, G_FILE_TEST_IS_REGULAR))
+     {
+       g_free(fullpath);

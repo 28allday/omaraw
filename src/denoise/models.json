@@ -1,0 +1,51 @@
+{
+  "schema": 2,
+  "packages": [
+    "numpy==2.5.3",
+    "Pillow==12.3.0",
+    "onnxruntime==1.30.0",
+    "onnxruntime-ep-webgpu==0.4.0",
+    "tifffile==2026.9.20",
+    "onnx==1.23.0",
+    "rawpy==0.26.1"
+  ],
+  "models": [
+    {
+      "name": "denoise.onnx",
+      "bytes": 43346864,
+      "sha256": "8e689c4c0f9d21c4730d719c0bbdb6432368559e0707bd01ba74ddf3a90d1f5c",
+      "source": {
+        "name": "ShadowWeightedL1_24_deep_500.onnx",
+        "bytes": 21863084,
+        "sha256": "0074e2f7bec359c613305811c2c4e7123f738010fb3a98ce67044c48ecfc0129",
+        "url": "https://github.com/rymuelle/RawForge/releases/download/onnx_v1.0.0/ShadowWeightedL1_24_deep_500.onnx"
+      },
+      "projectLicense": "MIT",
+      "licenseScope": "Upstream project licence; no separate model-weight licence published. Weights are optional upstream downloads, not bundled with OmaRAW.",
+      "project": "https://github.com/rymuelle/RawForge/tree/79f17700c29765b28a4cf5bd1b6d90bc7e3eb7f2",
+      "conversion": "FLOAT16 tensors, value types and Cast targets promoted to FLOAT by setup.py (onnx 1.23.0)",
+      "sensor": "bayer",
+      "label": "RawForge Heavy",
+      "isoConditioned": true
+    },
+    {
+      "projectLicense": "MIT",
+      "licenseScope": "Upstream project licence; no separate model-weight licence published. Weights are optional upstream downloads, not bundled with OmaRAW.",
+      "project": "https://github.com/rymuelle/RawForge/tree/79f17700c29765b28a4cf5bd1b6d90bc7e3eb7f2",
+      "name": "restormer-xtrans.onnx",
+      "sensor": "xtrans",
+      "label": "Restormer X-Trans",
+      "isoConditioned": false,
+      "fixedTile": true,
+      "bytes": 107821752,
+      "sha256": "340444c9f1fb7c20de343b122344e6addb244dfb9526d85245c850441caab11b",
+      "source": {
+        "name": "restormer.onnx",
+        "bytes": 55601279,
+        "sha256": "751a8f51c660fe03fe349db3e7c509df736da587e2f80617e98cbde07b2b8d29",
+        "url": "https://github.com/rymuelle/RawForge/releases/download/onnx_v1.0.0/restormer.onnx"
+      },
+      "conversion": "FLOAT16 promoted to FLOAT; input/output fixed to 1x3x256x256 with ONNX shape inference by setup.py (onnx 1.23.0)"
+    }
+  ]
+}

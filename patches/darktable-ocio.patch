@@ -1,0 +1,587 @@
+--- /dev/null
++++ b/src/common/omaraw_ocio.h
+@@ -0,0 +1,18 @@
++// OmaRAW colour adapter ABI 1. Registered before any image is processed.
++// Matrix rows have four floats; only the upper 3x3 is colour. A null matrix
++// means identity. LUTs/coefficients are borrowed for this call only.
++#pragma once
++#include <stddef.h>
++typedef void (*dt_omaraw_ocio_callback)(const float *input, float *output, int width, int height,
++                                      const float *matrix, const float *const lut[3],
++                                      const float *coefficients, int lutsize, int curves_before);
++extern dt_omaraw_ocio_callback dt_omaraw_ocio_transform;
++void dt_omaraw_set_ocio_transform(dt_omaraw_ocio_callback callback);
++static inline int dt_omaraw_ocio_apply(const float *input, float *output, int width, int height,
++                                      const float *matrix, const float *const lut[3],
++                                      const float *coefficients, int lutsize, int curves_before)
++{
++  if(!dt_omaraw_ocio_transform) return 0;
++  dt_omaraw_ocio_transform(input, output, width, height, matrix, lut, coefficients, lutsize, curves_before);
++  return 1;
++}
+--- a/src/common/iop_profile.c
++++ b/src/common/iop_profile.c
+@@ -16,6 +16,8 @@
+     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
+ */
+ 
++#include "common/omaraw_ocio.h"
++#include "common/omaraw_texture.h"
+ #include "common/colorspaces.h"
+ #include "common/darktable.h"
+ #include "common/iop_profile.h"
+@@ -50,6 +52,18 @@
+ #endif
+ 
+ 
++dt_omaraw_texture_callback dt_omaraw_texture = NULL;
++void dt_omaraw_set_texture(dt_omaraw_texture_callback callback)
++{
++  dt_omaraw_texture = callback;
++}
++
++dt_omaraw_ocio_callback dt_omaraw_ocio_transform = NULL;
++void dt_omaraw_set_ocio_transform(dt_omaraw_ocio_callback callback)
++{
++  dt_omaraw_ocio_transform = callback;
++}
++
+ static void _mark_as_nonmatrix_profile(dt_iop_order_iccprofile_info_t *const profile_info)
+ {
+   dt_mark_colormatrix_invalid(&profile_info->matrix_in[0][0]);
+@@ -431,6 +445,19 @@
+   const size_t stride = (size_t)width * height * ch;
+   const dt_colormatrix_t *matrix_ptr = &profile_info->matrix_in_transposed;
+ 
++  if(dt_omaraw_ocio_apply(image_in, image_out, width, height, &profile_info->matrix_in[0][0],
++       (const float *const *)profile_info->lut_in, &profile_info->unbounded_coeffs_in[0][0], profile_info->lutsize, 1))
++  {
++    DT_OMP_FOR()
++    for(size_t y = 0; y < stride; y += ch)
++    {
++      dt_aligned_pixel_t xyz;
++      copy_pixel(xyz, image_out + y);
++      dt_XYZ_to_Lab(xyz, image_out + y);
++    }
++    return;
++  }
++
+   if(profile_info->nonlinearlut)
+   {
+     // TODO : maybe optimize that path like _transform_matrix_rgb
+@@ -479,6 +506,21 @@
+   const size_t stride = (size_t)width * height * ch;
+   const dt_colormatrix_t *matrix_ptr = &profile_info->matrix_out_transposed;
+ 
++  if(dt_omaraw_ocio_transform)
++  {
++    DT_OMP_FOR()
++    for(size_t y = 0; y < stride; y += ch)
++    {
++      dt_aligned_pixel_t lab;
++      copy_pixel(lab, image_in + y);
++      dt_Lab_to_XYZ(lab, image_out + y);
++      image_out[y + 3] = lab[3];
++    }
++    dt_omaraw_ocio_apply(image_out, image_out, width, height, &profile_info->matrix_out[0][0],
++      (const float *const *)profile_info->lut_out, &profile_info->unbounded_coeffs_out[0][0], profile_info->lutsize, 0);
++    return;
++  }
++
+   DT_OMP_FOR()
+   for(size_t y = 0; y < stride; y += ch)
+   {
+@@ -517,6 +559,14 @@
+    const dt_iop_order_iccprofile_info_t *const profile_info_to)
+ {
+   const size_t stride = (size_t)width * height * 4;
++
++  if(dt_omaraw_ocio_apply(image_in, image_out, width, height, &profile_info_from->matrix_in[0][0],
++       (const float *const *)profile_info_from->lut_in, &profile_info_from->unbounded_coeffs_in[0][0], profile_info_from->lutsize, 1))
++  {
++    dt_omaraw_ocio_apply(image_out, image_out, width, height, &profile_info_to->matrix_out[0][0],
++      (const float *const *)profile_info_to->lut_out, &profile_info_to->unbounded_coeffs_out[0][0], profile_info_to->lutsize, 0);
++    return;
++  }
+ 
+   // RGB -> XYZ -> RGB are 2 matrices products, they can be premultiplied globally ahead
+   // and put in a new matrix. then we spare one matrix product per pixel.
+@@ -929,6 +979,13 @@
+   const gboolean exif_rgb = ocsp == DT_IMAGE_COLORSPACE_SRGB || ocsp == DT_IMAGE_COLORSPACE_ADOBE_RGB;
+   const gboolean new_rgb = ptype == DT_COLORSPACE_SRGB || ptype == DT_COLORSPACE_ADOBERGB;
+   const gboolean user_rgb = ocsp == DT_IMAGE_COLORSPACE_USER_RGB;
++  // Base-buffer downsampling reads this develop snapshot before colorin.
++  // Keep it consistent on the very first render as well as later reloads;
++  // updating only the image cache made untagged RGB images resize differently
++  // on first open versus revisit (and after switching input profiles).
++  dev->image_storage.colorspace = exif_rgb ? ocsp
++    : new_rgb ? DT_IMAGE_COLORSPACE_USER_RGB : DT_IMAGE_COLORSPACE_NONE;
++
+   if(!exif_rgb                       // don't fiddle with existing exif data
+       && ((new_rgb && !user_rgb) || (!new_rgb && user_rgb)))
+   {
+--- a/src/iop/colorin.c
++++ b/src/iop/colorin.c
+@@ -16,6 +16,7 @@
+     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
+ */
+ 
++#include "common/omaraw_ocio.h"
+ #include "bauhaus/bauhaus.h"
+ #include "common/imagebuf.h"
+ #include "common/iop_profile.h"
+@@ -1229,7 +1230,41 @@
+   }
+   else if(dt_is_valid_colormatrix(d->cmatrix[0][0]))
+   {
+-    process_cmatrix(self, piece, ivoid, ovoid, roi_in, roi_out, coeffs);
++    if(dt_omaraw_ocio_transform)
++    {
++      const int w = roi_out->width, h = roi_out->height;
++      const size_t n = (size_t)w * h;
++      const float *in = ivoid;
++      float *out = ovoid;
++      DT_OMP_FOR()
++      for(size_t k = 0; k < n; ++k)
++      {
++        for(int c = 0; c < 3; ++c) out[4*k+c] = in[4*k+c] * (blue_mapping ? 1.f : coeffs[c]);
++        out[4*k+3] = in[4*k+3];
++      }
++      const float *curves[3] = {d->lut[0], d->lut[1], d->lut[2]};
++      dt_omaraw_ocio_apply(out, out, w, h, NULL, curves, &d->unbounded_coeffs[0][0], LUT_SAMPLES, 1);
++      if(blue_mapping)
++      {
++        DT_OMP_FOR()
++        for(size_t k = 0; k < n; ++k) _apply_blue_mapping(out + 4*k, out + 4*k);
++      }
++      dt_omaraw_ocio_apply(out, out, w, h, d->nrgb ? &d->nmatrix[0][0] : &d->cmatrix[0][0], NULL, NULL, 0, 1);
++      if(d->nrgb)
++      {
++        DT_OMP_FOR()
++        for(size_t k = 0; k < n; ++k) for(int c = 0; c < 3; ++c) out[4*k+c] = CLAMP(out[4*k+c], 0.f, 1.f);
++        dt_omaraw_ocio_apply(out, out, w, h, &d->lmatrix[0][0], NULL, NULL, 0, 1);
++      }
++      DT_OMP_FOR()
++      for(size_t k = 0; k < n; ++k)
++      {
++        dt_aligned_pixel_t xyz;
++        copy_pixel(xyz, out + 4*k);
++        dt_XYZ_to_Lab(xyz, out + 4*k);
++      }
++    }
++    else process_cmatrix(self, piece, ivoid, ovoid, roi_in, roi_out, coeffs);
+   }
+   else
+   {
+--- a/src/iop/colorout.c
++++ b/src/iop/colorout.c
+@@ -16,6 +16,7 @@
+     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
+ */
+ 
++#include "common/omaraw_ocio.h"
+ #include "bauhaus/bauhaus.h"
+ #include "common/colorspaces.h"
+ #include "common/colorspaces_inline_conversions.h"
+@@ -535,7 +536,22 @@
+   }
+   else if(dt_is_valid_colormatrix(d->cmatrix[0][0]))
+   {
+-    if(!_transform_cmatrix(d, out, (float*)ivoid, npixels))
++    if(dt_omaraw_ocio_transform)
++    {
++      const float *in = ivoid;
++      DT_OMP_FOR()
++      for(size_t k = 0; k < npixels; ++k)
++      {
++        dt_aligned_pixel_t lab;
++        copy_pixel(lab, in + 4*k);
++        dt_Lab_to_XYZ(lab, out + 4*k);
++        out[4*k+3] = lab[3];
++      }
++      const float *curves[3] = {d->lut[0], d->lut[1], d->lut[2]};
++      dt_omaraw_ocio_apply(out, out, roi_out->width, roi_out->height,
++        &d->cmatrix[0][0], curves, &d->unbounded_coeffs[0][0], LUT_SAMPLES, 0);
++    }
++    else if(!_transform_cmatrix(d, out, (float*)ivoid, npixels))
+       _process_fastpath_apply_tonecurves(self, piece, ovoid, roi_out);
+   }
+   else
+--- a/src/common/exif.cc
++++ b/src/common/exif.cc
+@@ -5581,8 +5581,17 @@
+   g_free(iop_order_list);
+ }
+ 
++// OmaRAW owns the sanitized packet for one serialized export. Borrowed
++// storage stays alive until the native format writer returns.
++static const char *omaraw_export_xmp = nullptr;
++extern "C" void dt_omaraw_set_export_xmp(const char *packet)
++{
++  omaraw_export_xmp = packet;
++}
++
+ char *dt_exif_xmp_read_string(const dt_imgid_t imgid)
+ {
++  if(omaraw_export_xmp) return g_strdup(omaraw_export_xmp);
+   try
+   {
+     Lock lock;
+--- a/src/common/image.c
++++ b/src/common/image.c
+@@ -412,6 +412,14 @@
+   }
+ }
+ 
++// OmaRAW's durable working copies keep the original image identity. The
++// callback is registered once, before worker threads process any images.
++static int (*omaraw_source_resolver)(const char *, char *, size_t) = NULL;
++void dt_omaraw_set_source_resolver(int (*callback)(const char *, char *, size_t))
++{
++  omaraw_source_resolver = callback;
++}
++
+ void dt_image_full_path(const dt_imgid_t imgid,
+                         char *pathname,
+                         const size_t pathname_len,
+@@ -435,6 +443,12 @@
+ 
+   if(from_cache && *from_cache)
+   {
++    char working_copy[PATH_MAX] = { 0 };
++    if(omaraw_source_resolver && omaraw_source_resolver(pathname, working_copy, sizeof(working_copy)))
++    {
++      g_strlcpy(pathname, working_copy, pathname_len);
++      return;
++    }
+     char lc_pathname[PATH_MAX] = { 0 };
+     _image_local_copy_full_path(imgid, lc_pathname, sizeof(lc_pathname));
+ 
+--- a/src/develop/masks/masks.c
++++ b/src/develop/masks/masks.c
+@@ -972,6 +972,9 @@
+   int num_prev = -1;
+ 
+   sqlite3_stmt *stmt;
++  // Keep masks beyond history_end: loading a develop context writes its
++  // history back, and dropping those forms here destroys the redo branch.
++  // The current mask snapshot is selected separately below.
+   // clang-format off
+   if(dev->snapshot_id == -1)
+   {
+@@ -980,11 +983,9 @@
+       "SELECT imgid, formid, form, name, version, points, points_count, source, num"
+       " FROM main.masks_history"
+       " WHERE imgid = ?1"
+-      "   AND num < ?2"
+       " ORDER BY num",
+       -1, &stmt, NULL);
+     DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
+-    DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, dev->history_end);
+   }
+   else
+   {
+@@ -993,11 +994,9 @@
+       "SELECT imgid, formid, form, name, version, points, points_count, source, num"
+       " FROM memory.snapshot_masks_history"
+       " WHERE id = ?1"
+-      "   AND num < ?2"
+       " ORDER BY num",
+       -1, &stmt, NULL);
+     DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, dev->snapshot_id);
+-    DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, dev->history_end);
+   }
+   // clang-format on
+ 
+--- a/src/iop/contrastntexture.c
++++ b/src/iop/contrastntexture.c
+@@ -336,6 +336,19 @@
+   d->radius_local = (int)((diameter_local - 1.0f) / 2.0f);
+ }
+ 
++// Processing data includes a derived radius and is larger than the saved
++// parameters. The default init_pipe only allocates self->params_size.
++void init_pipe(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
++{
++  piece->data = g_malloc0(sizeof(dt_iop_contrast_data_t));
++}
++
++void cleanup_pipe(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
++{
++  g_free(piece->data);
++  piece->data = NULL;
++}
++
+ void commit_params(dt_iop_module_t *self,
+                    dt_iop_params_t *p1,
+                    dt_dev_pixelpipe_t *pipe,
+--- a/src/develop/masks/group.c
++++ b/src/develop/masks/group.c
+@@ -368,8 +368,10 @@
+   *width = r - l;
+   *height = b - t;
+ 
+-  // we allocate the buffer
+-  *buffer = dt_alloc_align_float((size_t)(r - l) * (b - t));
++  // A first union (including OmaRAW's bypassed shapes) must combine
++  // against an empty mask, never leftover heap contents.
++  *buffer = dt_calloc_align_float((size_t)(r - l) * (b - t));
++  if(!*buffer) goto error;
+ 
+   // and we copy each buffer inside, row by row
+   for(int i = 0; i < nb; i++)
+@@ -634,13 +636,16 @@
+                                const dt_iop_roi_t *const roi,
+                                float *const restrict buffer)
+ {
+-  if(!form->points) return 0;
+   double start = dt_get_debug_wtime();
+   int nb_ok = 0;
+ 
+   const int width = roi->width;
+   const int height = roi->height;
+   const size_t npixels = (size_t)width * height;
++  // Callers allocate the destination without clearing it. Start empty
++  // for a leading union and for groups with no renderable shapes.
++  memset(buffer, 0, npixels * sizeof(float));
++  if(!form->points) return 0;
+ 
+   // we need to allocate a zeroed temporary buffer for intermediate
+   // creation of individual shapes
+--- a/src/iop/diffuse.c
++++ b/src/iop/diffuse.c
+@@ -16,6 +16,7 @@
+    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
+ */
+ 
++#include "common/omaraw_texture.h"
+ #include "common/extra_optimizations.h"
+ 
+ #include "bauhaus/bauhaus.h"
+@@ -1337,6 +1338,18 @@
+   }
+ }
+ 
++// Only OmaRAW's curated Texture preset has an equivalent shared operation.
++// Any other diffuse preset, including inpainting, retains the native path.
++static gboolean _omaraw_texture_preset(const dt_iop_diffuse_data_t *d)
++{
++  return dt_omaraw_texture && d->iterations == 5 && d->radius == 170 && d->radius_center == 0
++    && d->sharpness == 0.f && d->regularization == 2.f && d->variance_threshold == 0.f
++    && d->threshold == 0.f && d->anisotropy_first == 10.f && d->anisotropy_fourth == 10.f
++    && d->anisotropy_second == 0.f && d->anisotropy_third == 0.f
++    && fabsf(d->first) <= .15f && d->fourth == d->first && d->third == d->second
++    && fabsf(d->second + d->first / 3.f) < 1e-7f;
++}
++
+ void process(dt_iop_module_t *self,
+              dt_dev_pixelpipe_iop_t *piece,
+              const void *const restrict ivoid,
+@@ -1359,14 +1372,25 @@
+     return;
+   }
+ 
++  const float scale = fmaxf(piece->iscale / roi_in->scale, 1.f);
++  const gboolean texture = piece->colors == 4 && roi_in->width == roi_out->width
++    && roi_in->height == roi_out->height && _omaraw_texture_preset(data);
++  const float amount = -data->first / .15f * 100.f;
++  if(texture && dt_omaraw_texture(ivoid, ovoid, width, height, amount, scale, -1))
++  {
++    dt_dev_piece_shutdown(piece, TRUE);
++    return;
++  }
++  const double texture_started = texture ? dt_get_wtime() : 0;
++
+   uint8_t *const restrict mask = dt_alloc_align_uint8(width * height);
+ 
+   float *restrict in = DT_IS_ALIGNED((float *const restrict)ivoid);
+   float *const restrict out = DT_IS_ALIGNED((float *const restrict)ovoid);
+ 
+-  float *restrict temp1, *restrict temp2;
++  float *restrict temp1 = NULL, *restrict temp2 = NULL;
+   // temp buffer for blurs. We will need to cycle between them for memory efficiency
+-  float *restrict LF_odd, *restrict LF_even;
++  float *restrict LF_odd = NULL, *restrict LF_even = NULL;
+ 
+   float *restrict temp_in = NULL;
+   float *restrict temp_out = NULL;
+@@ -1379,7 +1403,6 @@
+                                  4 | DT_IMGSZ_OUTPUT, &LF_even,
+                                  0, NULL); // if failing all pointers are NULL
+ 
+-  const float scale = fmaxf(piece->iscale / roi_in->scale, 1.f);
+   const float final_radius = (data->radius + data->radius_center) * 2.f / scale;
+ 
+   const int iterations = MAX(data->iterations, 1);
+@@ -1414,7 +1437,7 @@
+     in = temp1;
+   }
+ 
+-  for(int it = 0; it < iterations && !dt_dev_piece_shutdown(piece, (iterations-it) > 5); it++)
++  for(int it = 0; it < iterations && !dt_dev_piece_shutdown(piece, TRUE); it++)
+   {
+     if(it == 0)
+     {
+@@ -1448,6 +1471,9 @@
+   dt_free_align(LF_odd);
+   for(int s = 0; s < scales; s++)
+     if(HF[s]) dt_free_align(HF[s]);
++  if(texture && !out_of_memory && !dt_dev_piece_shutdown(piece, TRUE))
++    dt_omaraw_texture(ivoid, ovoid, width, height, amount, scale,
++                     (dt_get_wtime() - texture_started) * 1000.0);
+ }
+ 
+ #if HAVE_OPENCL
+@@ -1680,7 +1706,7 @@
+     in = temp1;
+   }
+ 
+-  for(int it = 0; it < iterations && err == CL_SUCCESS && !dt_dev_piece_shutdown(piece, (iterations-it)>5); it++)
++  for(int it = 0; it < iterations && err == CL_SUCCESS && !dt_dev_piece_shutdown(piece, TRUE); it++)
+   {
+     if(it == 0)
+     {
+--- a/src/develop/pixelpipe_hb.c
++++ b/src/develop/pixelpipe_hb.c
+@@ -3300,8 +3300,10 @@
+      we should respect that for an early pipe exit,
+      otherwise we mark the pipe as processing
+   */
+-  if(dt_atomic_get_int(&pipe->shutdown) !=  DT_DEV_PIXELPIPE_STOP_NODES)
+-    dt_atomic_set_int(&pipe->shutdown, DT_DEV_PIXELPIPE_PROCESSING);
++  // Do not overwrite a shutdown arriving between the load and startup.
++  int stopper = dt_atomic_get_int(&pipe->shutdown);
++  while(stopper != DT_DEV_PIXELPIPE_STOP_NODES
++        && !dt_atomic_CAS_int(&pipe->shutdown, &stopper, DT_DEV_PIXELPIPE_PROCESSING)) {}
+   pipe->nocache = dt_pipe_is_image(pipe);
+   pipe->runs++;
+   pipe->opencl_enabled = dt_opencl_running();
+--- /dev/null
++++ b/src/common/omaraw_texture.h
+@@ -0,0 +1,8 @@
++// OmaRAW optional Texture adapter ABI 1, registered before processing.
++#pragma once
++typedef int (*dt_omaraw_texture_callback)(const float *input, float *output, int width, int height,
++                                         float amount, float source_scale, double cpu_ms);
++// Negative cpu_ms attempts GPU; positive offers a completed native reference.
++// Return 1 only when output is supplied or the active preview was cancelled.
++extern dt_omaraw_texture_callback dt_omaraw_texture;
++void dt_omaraw_set_texture(dt_omaraw_texture_callback callback);
+--- a/src/common/interpolation.c
++++ b/src/common/interpolation.c
+@@ -976,6 +976,99 @@
+   return FALSE;
+ }
+ 
++// neighboring output rows share horizontal convolutions when downsampling
++// keep their sums in bounded bands, preserving both filter accumulation orders
++static gboolean _resample_banded(float *const out,
++                                 const float *const in,
++                                 const int width,
++                                 const int height,
++                                 const int out_width,
++                                 const int out_height,
++                                 const int *const hlength,
++                                 const float *const hkernel,
++                                 const int *const hindex,
++                                 const int *const vlength,
++                                 const float *const vkernel,
++                                 const int *const vindex,
++                                 const int *const vmeta)
++{
++  const size_t budget = 32u * 1024u * 1024u;
++  if((size_t)out_width > budget / (4 * sizeof(float))) return FALSE;
++  const size_t stride = (size_t)out_width * 4;
++  const int rows = MIN((size_t)height, budget / (stride * sizeof(float)));
++  if(rows < 1) return FALSE;
++  float *const scratch = dt_alloc_align_float((size_t)rows * stride);
++  if(!scratch) return FALSE;
++
++  for(int first = 0; first < out_height; )
++  {
++    int low = height, high = -1, end = first;
++    for(; end < out_height; end++)
++    {
++      int next_low = low, next_high = high;
++      const int count = vlength[vmeta[3 * end]];
++      const int index = vmeta[3 * end + 2];
++      for(int tap = 0; tap < count; tap++)
++      {
++        next_low = MIN(next_low, vindex[index + tap]);
++        next_high = MAX(next_high, vindex[index + tap]);
++      }
++      if(count < 1 || next_low < 0 || next_high >= height
++          || next_high - next_low + 1 > rows) break;
++      low = next_low;
++      high = next_high;
++    }
++    if(end == first)
++    {
++      dt_free_align(scratch);
++      return FALSE;
++    }
++
++    DT_OMP_FOR()
++    for(int y = low; y <= high; y++)
++    {
++      const float *const input = in + (size_t)y * width * 4;
++      float *const output = scratch + (size_t)(y - low) * stride;
++      int index = 0;
++      for(int x = 0; x < out_width; x++)
++      {
++        dt_aligned_pixel_t sum = { 0.0f, 0.0f, 0.0f, 0.0f };
++        for(int tap = 0; tap < hlength[x]; tap++, index++)
++        {
++          dt_aligned_pixel_t pixel;
++          copy_pixel(pixel, input + (size_t)hindex[index] * 4);
++          const float weight = hkernel[index];
++          for_each_channel(c, aligned(pixel,sum:16)) sum[c] += pixel[c] * weight;
++        }
++        copy_pixel(output + (size_t)x * 4, sum);
++      }
++    }
++
++    DT_OMP_FOR()
++    for(int y = first; y < end; y++)
++    {
++      const int count = vlength[vmeta[3 * y]];
++      const int kernel = vmeta[3 * y + 1];
++      const int index = vmeta[3 * y + 2];
++      for(int x = 0; x < out_width; x++)
++      {
++        dt_aligned_pixel_t sum = { 0.0f, 0.0f, 0.0f, 0.0f };
++        for(int tap = 0; tap < count; tap++)
++        {
++          const float *const pixel = scratch + (size_t)(vindex[index + tap] - low) * stride + (size_t)x * 4;
++          const float weight = vkernel[kernel + tap];
++          for_each_channel(c, aligned(pixel,sum:16)) sum[c] += pixel[c] * weight;
++        }
++        copy_pixel_nontemporal(out + (size_t)y * stride + (size_t)x * 4, sum);
++      }
++    }
++    dt_omploop_sfence();
++    first = end;
++  }
++  dt_free_align(scratch);
++  return TRUE;
++}
++
+ /** Applies resampling (re-scaling) on *full* input and output buffers.
+  *  roi_in and roi_out define the part of the buffers that is affected.
+  */
+@@ -1055,6 +1148,15 @@
+     goto exit;
+ 
+   dt_get_perf_times(&mid);
++
++  // strong reductions amortize the extra pass; bilinear remains cheaper directly
++  if(itor->width > 1 && roi_out->scale <= 0.2f && roi_in->width > 0 && roi_in->height > 0
++      && roi_out->width > 0 && roi_out->height > 0
++      && g_strcmp0(g_getenv("OMARAW_RESAMPLE_REUSE"), "0")
++      && _resample_banded(out, in, roi_in->width, roi_in->height,
++                          roi_out->width, roi_out->height,
++                          hlength, hkernel, hindex, vlength, vkernel, vindex, vmeta))
++    goto exit;
+ 
+   // Process each output line
+   DT_OMP_FOR()

@@ -1,0 +1,27 @@
+module OmaRaw.Library
+LibraryWorkspace 1.0 LibraryWorkspace.qml
+SourceSidebar 1.0 SourceSidebar.qml
+SourceRow 1.0 SourceRow.qml
+SectionHeader 1.0 SectionHeader.qml
+BrowserToolbar 1.0 BrowserToolbar.qml
+CullBar 1.0 CullBar.qml
+PhotoGrid 1.0 PhotoGrid.qml
+DetailList 1.0 DetailList.qml
+SmartAlbumDialog 1.0 SmartAlbumDialog.qml
+PhotoCard 1.0 PhotoCard.qml
+RatingStars 1.0 RatingStars.qml
+LabelDots 1.0 LabelDots.qml
+FlagMark 1.0 FlagMark.qml
+LoupeView 1.0 LoupeView.qml
+LibraryInspector 1.0 LibraryInspector.qml
+InspectorGroup 1.0 InspectorGroup.qml
+InspectorRow 1.0 InspectorRow.qml
+HistogramView 1.0 HistogramView.qml
+Filmstrip 1.0 Filmstrip.qml
+CompareView 1.0 CompareView.qml
+SurveyView 1.0 SurveyView.qml
+ImportWorkspace 1.0 ImportWorkspace.qml
+ImportBrowser 1.0 ImportBrowser.qml
+FolderBrowser 1.0 FolderBrowser.qml
+AutoTagSettings 1.0 AutoTagSettings.qml
+AutoTagPicker 1.0 AutoTagPicker.qml

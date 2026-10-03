@@ -1,0 +1,101 @@
+--- a/src/iop/retouch.c
++++ b/src/iop/retouch.c
+@@ -42,6 +42,13 @@
+ DT_MODULE_INTROSPECTION(3, dt_iop_retouch_params_t)
+ 
+ #define RETOUCH_NO_FORMS 300
++// OmaRAW's private, serial preview job. Reset to -1 before normal rendering.
++static gint omaraw_preview_scale = -1;
++G_MODULE_EXPORT void omaraw_retouch_preview_v1(int scale)
++{
++  g_atomic_int_set(&omaraw_preview_scale, CLAMP(scale, -1, 16));
++}
++
+ #define RETOUCH_MAX_SCALES 15
+ #define RETOUCH_NO_SCALES (RETOUCH_MAX_SCALES + 2)
+ 
+@@ -3913,6 +3920,7 @@
+   retouch_user_data_t usr_data = { 0 };
+   dwt_params_t *dwt_p = NULL;
+ 
++  const int oma_scale = g_atomic_int_get(&omaraw_preview_scale);
+   const gboolean display_wavelet_scale = g && dt_iop_has_focus(self) ? g->display_wavelet_scale : FALSE;
+ 
+   // we will do all the clone, heal, etc on the input image,
+@@ -3934,14 +3942,12 @@
+                             && g->suppress_mask
+                             && dt_iop_has_focus(self)
+                             && (piece->pipe == self->dev->full.pipe));
+-  usr_data.display_scale = p->curr_scale;
++  usr_data.display_scale = oma_scale >= 0 ? oma_scale : p->curr_scale;
+ 
+   // init the decompose routine
+   dwt_p = dt_dwt_init(in_retouch, roi_rt->width, roi_rt->height, 4, p->num_scales,
+-                      (!display_wavelet_scale
+-                       || !dt_pipe_is_full(piece->pipe))
+-                      ? 0
+-                      : p->curr_scale,
++                      oma_scale >= 0 ? oma_scale : ((!display_wavelet_scale
++                       || !dt_pipe_is_full(piece->pipe)) ? 0 : p->curr_scale),
+                       p->merge_from_scale, &usr_data,
+                       roi_in->scale / piece->iscale);
+   if(dwt_p == NULL) goto cleanup;
+@@ -4732,6 +4738,7 @@
+   retouch_user_data_t usr_data = { 0 };
+   dwt_params_cl_t *dwt_p = NULL;
+ 
++  const int oma_scale = g_atomic_int_get(&omaraw_preview_scale);
+   const gboolean display_wavelet_scale = g && dt_iop_has_focus(self) ? g->display_wavelet_scale : FALSE;
+ 
+   // we will do all the clone, heal, etc on the input image, this way
+@@ -4757,12 +4764,12 @@
+                             && g->suppress_mask
+                             && dt_iop_has_focus(self)
+                             && (piece->pipe == self->dev->full.pipe));
+-  usr_data.display_scale = p->curr_scale;
++  usr_data.display_scale = oma_scale >= 0 ? oma_scale : p->curr_scale;
+ 
+   // init the decompose routine
+   dwt_p = dt_dwt_init_cl(devid, in_retouch, roi_rt->width, roi_rt->height, p->num_scales,
+-                         (!display_wavelet_scale || !dt_pipe_is_full(piece->pipe))
+-                         ? 0 : p->curr_scale,
++                         oma_scale >= 0 ? oma_scale : ((!display_wavelet_scale || !dt_pipe_is_full(piece->pipe))
++                         ? 0 : p->curr_scale),
+                          p->merge_from_scale,
+                          &usr_data,
+                          roi_in->scale / piece->iscale);
+--- a/src/iop/rasterfile.c
++++ b/src/iop/rasterfile.c
+@@ -31,6 +31,7 @@
+ #include "develop/imageop.h"
+ #include "develop/imageop_gui.h"
+ #include "develop/imageop_math.h"
++#include "common/database.h"
+ #include "common/interpolation.h"
+ #include "common/fast_guided_filter.h"
+ #include "common/pfm.h"
+@@ -608,6 +609,24 @@
+ 
+   d->mode = p->mode;
+   gchar *fullpath = g_build_filename(p->path, p->file, NULL);
++  // OmaRAW's content-addressed masks travel beside the engine library.
++  // Resolve there first so restored history works without rewriting edits.
++  gboolean managed = strlen(p->file) == 68 && !strcmp(p->file + 64, ".png");
++  for(int i = 0; managed && i < 64; ++i)
++    managed = (p->file[i] >= '0' && p->file[i] <= '9')
++           || (p->file[i] >= 'a' && p->file[i] <= 'f');
++  if(managed && darktable.db)
++  {
++    gchar *library = g_path_get_dirname(dt_database_get_path(darktable.db));
++    gchar *local = g_build_filename(library, "masks", p->file, NULL);
++    if(g_file_test(local, G_FILE_TEST_IS_REGULAR))
++    {
++      g_free(fullpath);
++      fullpath = local;
++    }
++    else g_free(local);
++    g_free(library);
++  }
+   dt_strlcpy_to_fixed(d->filepath, fullpath, sizeof(d->filepath));
+   g_free(fullpath);
+ }

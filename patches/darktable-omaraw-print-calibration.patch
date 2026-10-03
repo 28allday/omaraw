@@ -1,0 +1,46 @@
+--- a/src/iop/omarawprint.c
++++ b/src/iop/omarawprint.c
+@@ -21,13 +21,13 @@
+ 
+ DT_MODULE_INTROSPECTION(3, dt_iop_omarawprint_params_t)
+ 
+-#define OMARAW_PRINT_STOCKS 22
++#define OMARAW_PRINT_STOCKS 24
+ static const char *const omaraw_print_stock_files[OMARAW_PRINT_STOCKS] = {
+   "kodak-2383", "kodak-2393", "fuji-3510", "fuji-3513di", "fuji-3521xd", "fuji-3523xd", "agfa-cp30", "kodak-2302",
+   "kodak-portra-160-endura", "kodak-portra-400-endura", "kodak-portra-800-endura", "kodak-ektar-100-endura",
+   "kodak-gold-200-endura", "kodak-ultramax-400-endura",
+   "kodak-2383-v2", "kodak-2393-v2", "fuji-3510-v2", "fuji-3513di-v2", "fuji-3521xd-v2", "fuji-3523xd-v2",
+-  "agfa-cp30-v2", "kodak-2302-v2"
++  "agfa-cp30-v2", "kodak-2302-v2", NULL, "kodak-2383-v3"
+ };
+ 
+ typedef enum dt_iop_omarawprint_stock_t
+@@ -44,7 +44,8 @@
+   OMARAW_PRINT_CINEMA_2302 = 7,  // $DESCRIPTION: "Cinema Mono 2302 (first version)"
+   // The cinema prints, second version: the negative's base counted once and
+   // no sensitivity beyond the spans the sheets draw (docs/PRINT-STOCKS.md, 12).
+-  OMARAW_PRINT_CINEMA_2383_V2 = 14, // $DESCRIPTION: "Cinema 2383"
++  OMARAW_PRINT_CINEMA_2383_V3 = 23, // $DESCRIPTION: "Cinema 2383"
++  OMARAW_PRINT_CINEMA_2383_V2 = 14, // $DESCRIPTION: "Cinema 2383 (second version)"
+   OMARAW_PRINT_CINEMA_2393_V2 = 15, // $DESCRIPTION: "Cinema 2393"
+   OMARAW_PRINT_CINEMA_3510_V2 = 16,  // $DESCRIPTION: "Cinema 3510"
+   OMARAW_PRINT_CINEMA_3513_V2 = 17,  // $DESCRIPTION: "Cinema 3513DI"
+@@ -80,7 +81,7 @@
+ 
+ typedef struct dt_iop_omarawprint_params_t
+ {
+-  dt_iop_omarawprint_stock_t stock; // $DEFAULT: OMARAW_PRINT_CINEMA_2383_V2 $DESCRIPTION: "stock"
++  dt_iop_omarawprint_stock_t stock; // $DEFAULT: OMARAW_PRINT_CINEMA_2383_V3 $DESCRIPTION: "stock"
+   float strength;   // $MIN: 0.0 $MAX: 100.0 $DEFAULT: 100.0 $DESCRIPTION: "strength"
+   dt_iop_omarawprint_white_t white; // $DEFAULT: OMARAW_PRINT_WHITE_D65 $DESCRIPTION: "display white"
+   dt_iop_omarawprint_paper_t paper; // $DEFAULT: OMARAW_PRINT_PAPER_PRINTED $DESCRIPTION: "white"
+@@ -160,7 +161,7 @@
+ static const omaraw_print_tables_t *_load_locked(int stock);
+ static const omaraw_print_tables_t *_load(int stock)
+ {
+-  if(stock < 0 || stock >= OMARAW_PRINT_STOCKS) return NULL;
++  if(stock < 0 || stock >= OMARAW_PRINT_STOCKS || !omaraw_print_stock_files[stock]) return NULL;
+   g_mutex_lock(&g_load_lock);
+   const omaraw_print_tables_t *t = NULL;
+   if(g_loaded[stock]) t = &g_tables[stock];

@@ -1,0 +1,3 @@
+OmaRAW workflow configuration restoration fix, 2026.
+Modifications to darktable are licensed GPL-3.0-or-later.
+Save an owned copy before temporarily replacing the workflow string; the setter frees its previous value.

@@ -1,0 +1,155 @@
+--- a/src/iop/monochrome.c
++++ b/src/iop/monochrome.c
+@@ -22,6 +22,7 @@
+ #include "common/bilateral.h"
+ #include "common/bilateralcl.h"
+ #include "common/colorspaces.h"
++#include "common/colorspaces_inline_conversions.h"
+ #include "common/math.h"
+ #include "common/opencl.h"
+ #include "control/control.h"
+@@ -40,7 +41,7 @@
+ #include <string.h>
+ 
+ 
+-DT_MODULE_INTROSPECTION(2, dt_iop_monochrome_params_t)
++DT_MODULE_INTROSPECTION(3, dt_iop_monochrome_params_t)
+ 
+ #define DT_COLORCORRECTION_INSET DT_PIXEL_APPLY_DPI(5)
+ #define DT_COLORCORRECTION_MAX 40.
+@@ -52,11 +53,21 @@
+   float b; // $DEFAULT: 0.0
+   float size; // $DEFAULT: 2.0
+   float highlights; // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.0
++  float mix_red; // $MIN: -1.0 $MAX: 1.0 $DEFAULT: 0.0
++  float mix_orange; // $MIN: -1.0 $MAX: 1.0 $DEFAULT: 0.0
++  float mix_yellow; // $MIN: -1.0 $MAX: 1.0 $DEFAULT: 0.0
++  float mix_green; // $MIN: -1.0 $MAX: 1.0 $DEFAULT: 0.0
++  float mix_aqua; // $MIN: -1.0 $MAX: 1.0 $DEFAULT: 0.0
++  float mix_blue; // $MIN: -1.0 $MAX: 1.0 $DEFAULT: 0.0
++  float mix_purple; // $MIN: -1.0 $MAX: 1.0 $DEFAULT: 0.0
++  float mix_magenta; // $MIN: -1.0 $MAX: 1.0 $DEFAULT: 0.0
+ } dt_iop_monochrome_params_t;
+ 
+ typedef struct dt_iop_monochrome_data_t
+ {
+   float a, b, size, highlights;
++  float mix[8];
++  gboolean mix_active;
+ } dt_iop_monochrome_data_t;
+ 
+ typedef struct dt_iop_monochrome_gui_data_t
+@@ -112,31 +123,15 @@
+                   int32_t *new_params_size,
+                   int *new_version)
+ {
+-  typedef struct dt_iop_monochrome_params_v2_t
+-  {
+-    float a;
+-    float b;
+-    float size;
+-    float highlights;
+-  } dt_iop_monochrome_params_v2_t;
+-
+-  if(old_version == 1)
+-  {
+-    typedef struct dt_iop_monochrome_params_v1_t
+-    {
+-      float a;
+-      float b;
+-      float size;
+-    } dt_iop_monochrome_params_v1_t;
+-
+-    const dt_iop_monochrome_params_v1_t *o = (dt_iop_monochrome_params_v1_t *)old_params;
+-    dt_iop_monochrome_params_v2_t *n = malloc(sizeof(dt_iop_monochrome_params_v2_t));
+-    memcpy(n, o, sizeof(dt_iop_monochrome_params_v1_t));
+-    n->highlights = 0.0f;
+-
++  // Extend existing edit blobs with neutral bands; the four original
++  // parameters keep their meaning and older photos retain their appearance.
++  if(old_version == 1 || old_version == 2)
++  {
++    dt_iop_monochrome_params_t *n = calloc(1, sizeof(*n));
++    memcpy(n, old_params, (old_version == 1 ? 3 : 4) * sizeof(float));
+     *new_params = n;
+-    *new_params_size = sizeof(dt_iop_monochrome_params_v2_t);
+-    *new_version = 2;
++    *new_params_size = sizeof(*n);
++    *new_version = 3;
+     return 0;
+   }
+   return 1;
+@@ -144,7 +139,7 @@
+ 
+ void init_presets(dt_iop_module_so_t *self)
+ {
+-  dt_iop_monochrome_params_t p;
++  dt_iop_monochrome_params_t p = {0};
+ 
+   p.size = 2.3f;
+ 
+@@ -194,6 +189,37 @@
+     const float tmp3 = tmp2 * tmp1;
+     return 3.0f * tmp2 - 2.0f * tmp3;
+   }
++}
++
++// OmaRAW B&W mix. Classify the original Lab colour in display RGB hue,
++// then smoothly interpolate only the two neighbouring colour controls.
++// Neutral protection avoids amplifying unstable hue in greys and shadows.
++static float _mix_gain(const float *Lab, const float mix[8])
++{
++  const float chroma2 = Lab[1]*Lab[1] + Lab[2]*Lab[2];
++  if(chroma2 <= 4.f || Lab[0] <= 0.f) return 1.f;
++  const dt_aligned_pixel_t lab = {Lab[0], Lab[1], Lab[2], 0.f};
++  dt_aligned_pixel_t xyz, rgb;
++  dt_Lab_to_XYZ(lab, xyz);
++  dt_XYZ_to_sRGB(xyz, rgb);
++  const float lo = fminf(rgb[0], fminf(rgb[1], rgb[2]));
++  const float hi = fmaxf(rgb[0], fmaxf(rgb[1], rgb[2]));
++  const float delta = hi - lo;
++  if(!isfinite(delta) || delta <= 1e-6f) return 1.f;
++  float hue = hi == rgb[0] ? (rgb[1]-rgb[2])/delta
++            : hi == rgb[1] ? 2.f+(rgb[2]-rgb[0])/delta
++                           : 4.f+(rgb[0]-rgb[1])/delta;
++  if(hue < 0.f) hue += 6.f;
++  hue *= 60.f;
++  const float centres[9] = {0.f,30.f,60.f,120.f,180.f,240.f,270.f,300.f,360.f};
++  int band = 0;
++  while(band < 7 && hue > centres[band+1]) band++;
++  float t = CLAMPS((hue-centres[band])/(centres[band+1]-centres[band]),0.f,1.f);
++  t = t*t*(3.f-2.f*t);
++  float protect = CLAMPS((sqrtf(chroma2)-2.f)/10.f,0.f,1.f);
++  protect = protect*protect*(3.f-2.f*protect);
++  const float amount = (1.f-t)*mix[band] + t*mix[(band+1)%8];
++  return exp2f(amount*protect);
+ }
+ 
+ void process(dt_iop_module_t *self,
+@@ -248,6 +274,7 @@
+     const float tt = _envelope(in[k]);
+     const float t = tt + (1.0f - tt) * (1.0f - highlights);
+     out[k] = (1.0f - t) * in[k] + t * out[k] * (1.0f / 100.0f) * in[k]; // normalized filter * input brightness
++    if(d->mix_active) out[k] *= _mix_gain(in+k, d->mix);
+   }
+ }
+ 
+@@ -338,9 +365,17 @@
+   d->b = p->b;
+   d->size = p->size;
+   d->highlights = p->highlights;
++  const float mix[8] = {p->mix_red, p->mix_orange, p->mix_yellow, p->mix_green,
++                        p->mix_aqua, p->mix_blue, p->mix_purple, p->mix_magenta};
++  d->mix_active = FALSE;
++  for(int i = 0; i < 8; i++)
++  {
++    d->mix[i] = isfinite(mix[i]) ? CLAMPS(mix[i],-1.f,1.f) : 0.f;
++    d->mix_active |= d->mix[i] != 0.f;
++  }
+ 
+ #ifdef HAVE_OPENCL
+-  piece->process_cl_ready = (piece->process_cl_ready && !dt_opencl_avoid_atomics(pipe->devid));
++  piece->process_cl_ready = (piece->process_cl_ready && !d->mix_active && !dt_opencl_avoid_atomics(pipe->devid));
+ #endif
+ }
+ 

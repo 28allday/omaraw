@@ -1,0 +1,643 @@
+--- a/src/common/interpolation.c
++++ b/src/common/interpolation.c
+@@ -452,7 +452,7 @@
+                                                 float *kernel,
+                                                 float *norm,
+                                                 const float outoinratio,
+-                                                const int xout)
++                                                const float xout)
+ {
+   // Keep this at hand
+   const float w = (float)itor->width;
+@@ -796,7 +796,7 @@
+ static gboolean _prepare_resampling_plan(const dt_interpolation_t *itor,
+                                          const int in,
+                                          const int out,
+-                                         const int shift,
++                                         const float shift,
+                                          const float scale,
+                                          int **plength,
+                                          float **pkernel,
+@@ -1072,11 +1072,11 @@
+ /** Applies resampling (re-scaling) on *full* input and output buffers.
+  *  roi_in and roi_out define the part of the buffers that is affected.
+  */
+-void dt_interpolation_resample(const dt_interpolation_t *itor,
++static void _resample(const dt_interpolation_t *itor,
+                                float *out,
+                                const dt_iop_roi_t *const roi_out,
+                                const float *const in,
+-                               const dt_iop_roi_t *const roi_in)
++                               const dt_iop_roi_t *const roi_in, const float dx, const float dy)
+ {
+   if(out == NULL)
+   {
+@@ -1095,8 +1095,6 @@
+   const size_t in_stride_floats = roi_in->width * 4;
+   const size_t out_stride_floats = roi_out->width * 4;
+ 
+-  const int dx = MAX(0, roi_out->x);
+-  const int dy = MAX(0, roi_out->y);
+   const gboolean wd_fit = roi_in->width >= (roi_out->width - dx);
+   const gboolean ht_fit = roi_in->height >= (roi_out->height - dy);
+   const gboolean copymode = roi_out->scale == 1.0f;
+@@ -1122,7 +1120,7 @@
+       uint8_t *o = (uint8_t *)out + owidth * row;
+       if((row + dy) < roi_in->height)
+       {
+-        memcpy(o, (uint8_t *)in + in_stride_floats * sizeof(float) * (row + dy) + x0, cp_width);
++        memcpy(o, (uint8_t *)in + in_stride_floats * sizeof(float) * (row + (int)dy) + x0, cp_width);
+         if(!wd_fit)
+           memset(o + cp_width, 0, owidth - cp_width);
+       }
+@@ -1238,6 +1236,25 @@
+  *  roi's. roi_in and roi_out define the relative positions of the
+  *  roi's within the full input and output image, respectively.
+  */
++// The conventional API treats the input as a local buffer.
++void dt_interpolation_resample(const dt_interpolation_t *itor, float *out,
++                              const dt_iop_roi_t *roi_out, const float *in,
++                              const dt_iop_roi_t *roi_in)
++{
++  _resample(itor, out, roi_out, in, roi_in, MAX(0, roi_out->x), MAX(0, roi_out->y));
++}
++
++// Preserve the fractional sensor origin after an integer input ROI has been
++// requested. Dropping it changes detail alignment with crop and source scale.
++void dt_interpolation_resample_aligned(const dt_interpolation_t *itor, float *out,
++                                      const dt_iop_roi_t *roi_out, const float *in,
++                                      const dt_iop_roi_t *roi_in)
++{
++  _resample(itor, out, roi_out, in, roi_in,
++            roi_out->x - roi_in->x * roi_out->scale,
++            roi_out->y - roi_in->y * roi_out->scale);
++}
++
+ void dt_interpolation_resample_roi(const dt_interpolation_t *itor,
+                                    float *out,
+                                    const dt_iop_roi_t *const roi_out,
+--- a/src/common/interpolation.h
++++ b/src/common/interpolation.h
+@@ -128,6 +128,10 @@
+  * @param roi_in [in] Region of interest of the original image
+  * @param in_stride [in] Input line stride in <strong>bytes</strong>
+  */
++void dt_interpolation_resample_aligned(const dt_interpolation_t *itor, float *out,
++                                      const dt_iop_roi_t *roi_out, const float *in,
++                                      const dt_iop_roi_t *roi_in);
++
+ void dt_interpolation_resample(const dt_interpolation_t *itor, float *out,
+                                const dt_iop_roi_t *const roi_out,
+                                const float *const in, const dt_iop_roi_t *const roi_in);
+--- a/src/develop/imageop_math.c
++++ b/src/develop/imageop_math.c
+@@ -247,6 +247,57 @@
+ 
+ #endif
+ 
++// Use the same centred CFA footprint for live reduced mosaics and stored
++// Smart Previews. Integer CFA-block bounds otherwise move their sample grid.
++static void _omaraw_reduce_mosaic(void *out, const void *input, int width, int height,
++                                int out_width, int out_height, float scale,
++                                int out_stride, int in_stride, uint32_t filters,
++                                const uint8_t (*xtrans)[6], gboolean floating) {
++    const double step = 1.0 / scale;
++    DT_OMP_FOR()
++    for (int y = 0; y < out_height; y++) {
++        const double top = (y - .5) * step + .5, bottom = (y + .5) * step + .5;
++        const int y0 = MAX(0, (int)floor(top)), y1 = MIN(height, (int)ceil(bottom));
++        for (int x = 0; x < out_width; x++) {
++            const double left = (x - .5) * step + .5, right = (x + .5) * step + .5;
++            const int x0 = MAX(0, (int)floor(left)), x1 = MIN(width, (int)ceil(right));
++            const int colour = xtrans ? xtrans[y % 6][x % 6] : FC(y, x, filters);
++            double sum = 0.0, weight = 0.0;
++            for (int sy = y0; sy < y1; sy++) {
++                const double wy = MIN(bottom, sy + 1.0) - MAX(top, sy);
++                for (int sx = x0; sx < x1; sx++) {
++                    const int c = xtrans ? xtrans[sy % 6][sx % 6] : FC(sy, sx, filters);
++                    if (c != colour) continue;
++                    const double w = wy * (MIN(right, sx + 1.0) - MAX(left, sx));
++                    const size_t index = (size_t)sy * in_stride + sx;
++                    sum += w * (floating ? ((const float *)input)[index] : ((const uint16_t *)input)[index]);
++                    weight += w;
++                }
++            }
++            // A narrow X-Trans footprint can contain no site of this colour.
++            // Use the nearest matching photosite instead of inserting black.
++            if (weight == 0.0) {
++                const int cx = CLAMP((int)round(x * step), 0, width - 1);
++                const int cy = CLAMP((int)round(y * step), 0, height - 1);
++                double best = G_MAXDOUBLE;
++                for (int sy = MAX(0, cy - 6); sy <= MIN(height - 1, cy + 6); ++sy)
++                    for (int sx = MAX(0, cx - 6); sx <= MIN(width - 1, cx + 6); ++sx) {
++                        const int c = xtrans ? xtrans[sy % 6][sx % 6] : FC(sy, sx, filters);
++                        const double distance = (sx - x * step) * (sx - x * step) + (sy - y * step) * (sy - y * step);
++                        if (c != colour || distance >= best) continue;
++                        best = distance;
++                        const size_t i = (size_t)sy * in_stride + sx;
++                        sum = floating ? ((const float *)input)[i] : ((const uint16_t *)input)[i];
++                        weight = 1.0;
++                    }
++            }
++            const size_t index = (size_t)y * out_stride + x;
++            if (floating) ((float *)out)[index] = weight > 0.0 ? sum / weight : 0.0;
++            else ((uint16_t *)out)[index] = weight > 0.0 ? (uint16_t)round(sum / weight) : 0;
++        }
++    }
++}
++
+ void dt_iop_clip_and_zoom_mosaic_half_size(uint16_t *const out,
+                                            const uint16_t *const in,
+                                            const dt_iop_roi_t *const roi_out,
+@@ -255,69 +306,8 @@
+                                            const int32_t in_stride,
+                                            const uint32_t filters)
+ {
+-  // adjust to pixel region and don't sample more than scale/2 nbs!
+-  // pixel footprint on input buffer, radius:
+-  const float px_footprint = 1.f / roi_out->scale;
+-
+-  // move to origin point 01 of a 2x2 CFA block
+-  // (RGGB=0112 or CYGM=0132)
+-  int trggbx = 0, trggby = 0;
+-  if(FC(trggby, trggbx + 1, filters) != 1) trggbx++;
+-  if(FC(trggby, trggbx, filters) != 0)
+-  {
+-    trggbx = (trggbx + 1) & 1;
+-    trggby++;
+-  }
+-  const int rggbx = trggbx, rggby = trggby;
+-
+-  // Create a reverse lookup of FC(): for each CFA color, a list of
+-  // offsets from start of a 2x2 block at which to find that
+-  // color. First index is color, second is to the list of offsets,
+-  // preceded by the number of offsets.
+-  int clut[4][3] = {{0}};
+-  for(int y = 0; y < 2; ++y)
+-    for(int x = 0; x < 2; ++x)
+-    {
+-      const int c = FC(y + rggby, x + rggbx, filters);
+-      assert(clut[c][0] < 2);
+-      clut[c][++clut[c][0]] = x + y * in_stride;
+-    }
+-
+-  DT_OMP_FOR()
+-  for(int y = 0; y < roi_out->height; y++)
+-  {
+-    uint16_t *outc = out + out_stride * y;
+-
+-    const float fy = y * px_footprint;
+-    const int miny = (CLAMPS((int)floorf(fy - px_footprint),
+-                             0, roi_in->height-3) & ~1u) + rggby;
+-    const int maxy = MIN(roi_in->height-1, (int)ceilf(fy + px_footprint));
+-
+-    float fx = 0.0f;
+-    for(int x = 0; x < roi_out->width; x++, fx += px_footprint, outc++)
+-    {
+-      const int minx = (CLAMPS((int)floorf(fx - px_footprint),
+-                               0, roi_in->width-3) & ~1u) + rggbx;
+-      const int maxx = MIN(roi_in->width-1, (int)ceilf(fx + px_footprint));
+-
+-      const int c = FC(y, x, filters);
+-      int num = 0;
+-      uint32_t col = 0;
+-
+-      for(int yy = miny; yy < maxy; yy += 2)
+-        for(int xx = minx; xx < maxx; xx += 2)
+-        {
+-          col += in[clut[c][1] + xx + in_stride * yy];
+-          num++;
+-          if(clut[c][0] == 2)
+-          { // G in RGGB CFA
+-            col += in[clut[c][2] + xx + in_stride * yy];
+-            num++;
+-          }
+-        }
+-      if(num) *outc = col / num;
+-    }
+-  }
++  _omaraw_reduce_mosaic(out, in, roi_in->width, roi_in->height, roi_out->width, roi_out->height,
++                        roi_out->scale, out_stride, in_stride, filters, NULL, FALSE);
+ }
+ 
+ void dt_iop_clip_and_zoom_mosaic_half_size_f(float *const out,
+@@ -328,183 +318,8 @@
+                                              const int32_t in_stride,
+                                              const uint32_t filters)
+ {
+-  // adjust to pixel region and don't sample more than scale/2 nbs!
+-  // pixel footprint on input buffer, radius:
+-  const float px_footprint = 1.f / roi_out->scale;
+-  // how many 2x2 blocks can be sampled inside that area
+-  const int samples = round(px_footprint / 2);
+-
+-  // move p to point to an rggb block:
+-  int trggbx = 0, trggby = 0;
+-  if(FC(trggby, trggbx + 1, filters) != 1) trggbx++;
+-  if(FC(trggby, trggbx, filters) != 0)
+-  {
+-    trggbx = (trggbx + 1) & 1;
+-    trggby++;
+-  }
+-  const int rggbx = trggbx, rggby = trggby;
+-
+-  DT_OMP_FOR()
+-  for(int y = 0; y < roi_out->height; y++)
+-  {
+-    float *outc = out + out_stride * y;
+-
+-    const float fy = y * px_footprint;
+-    int py = (int)fy & ~1;
+-    const float dy = (fy - py) / 2;
+-    py = MIN(((roi_in->height - 6) & ~1u), py) + rggby;
+-
+-    int maxj = MIN(((roi_in->height - 5) & ~1u) + rggby, py + 2 * samples);
+-
+-    for(int x = 0; x < roi_out->width; x++)
+-    {
+-      dt_aligned_pixel_t col = { 0, 0, 0, 0 };
+-
+-      const float fx = x * px_footprint;
+-      int px = (int)fx & ~1;
+-      const float dx = (fx - px) / 2;
+-      px = MIN(((roi_in->width - 6) & ~1u), px) + rggbx;
+-
+-      const int maxi = MIN(((roi_in->width - 5) & ~1u) + rggbx, px + 2 * samples);
+-
+-      dt_aligned_pixel_t p;
+-      float num = 0;
+-
+-      // upper left 2x2 block of sampling region
+-      p[0] = in[px + in_stride * py];
+-      p[1] = in[px + 1 + in_stride * py];
+-      p[2] = in[px + in_stride * (py + 1)];
+-      p[3] = in[px + 1 + in_stride * (py + 1)];
+-      for(int c = 0; c < 4; c++) col[c] += ((1 - dx) * (1 - dy)) * p[c];
+-
+-      // left 2x2 block border of sampling region
+-      for(int j = py + 2; j <= maxj; j += 2)
+-      {
+-        p[0] = in[px + in_stride * j];
+-        p[1] = in[px + 1 + in_stride * j];
+-        p[2] = in[px + in_stride * (j + 1)];
+-        p[3] = in[px + 1 + in_stride * (j + 1)];
+-        for(int c = 0; c < 4; c++) col[c] += (1 - dx) * p[c];
+-      }
+-
+-      // upper 2x2 block border of sampling region
+-      for(int i = px + 2; i <= maxi; i += 2)
+-      {
+-        p[0] = in[i + in_stride * py];
+-        p[1] = in[i + 1 + in_stride * py];
+-        p[2] = in[i + in_stride * (py + 1)];
+-        p[3] = in[i + 1 + in_stride * (py + 1)];
+-        for(int c = 0; c < 4; c++) col[c] += (1 - dy) * p[c];
+-      }
+-
+-      // 2x2 blocks in the middle of sampling region
+-      for(int j = py + 2; j <= maxj; j += 2)
+-        for(int i = px + 2; i <= maxi; i += 2)
+-        {
+-          p[0] = in[i + in_stride * j];
+-          p[1] = in[i + 1 + in_stride * j];
+-          p[2] = in[i + in_stride * (j + 1)];
+-          p[3] = in[i + 1 + in_stride * (j + 1)];
+-          for(int c = 0; c < 4; c++) col[c] += p[c];
+-        }
+-
+-      if(maxi == px + 2 * samples && maxj == py + 2 * samples)
+-      {
+-        // right border
+-        for(int j = py + 2; j <= maxj; j += 2)
+-        {
+-          p[0] = in[maxi + 2 + in_stride * j];
+-          p[1] = in[maxi + 3 + in_stride * j];
+-          p[2] = in[maxi + 2 + in_stride * (j + 1)];
+-          p[3] = in[maxi + 3 + in_stride * (j + 1)];
+-          for(int c = 0; c < 4; c++) col[c] += dx * p[c];
+-        }
+-
+-        // upper right
+-        p[0] = in[maxi + 2 + in_stride * py];
+-        p[1] = in[maxi + 3 + in_stride * py];
+-        p[2] = in[maxi + 2 + in_stride * (py + 1)];
+-        p[3] = in[maxi + 3 + in_stride * (py + 1)];
+-        for(int c = 0; c < 4; c++) col[c] += (dx * (1 - dy)) * p[c];
+-
+-        // lower border
+-        for(int i = px + 2; i <= maxi; i += 2)
+-        {
+-          p[0] = in[i + in_stride * (maxj + 2)];
+-          p[1] = in[i + 1 + in_stride * (maxj + 2)];
+-          p[2] = in[i + in_stride * (maxj + 3)];
+-          p[3] = in[i + 1 + in_stride * (maxj + 3)];
+-          for(int c = 0; c < 4; c++) col[c] += dy * p[c];
+-        }
+-
+-        // lower left 2x2 block
+-        p[0] = in[px + in_stride * (maxj + 2)];
+-        p[1] = in[px + 1 + in_stride * (maxj + 2)];
+-        p[2] = in[px + in_stride * (maxj + 3)];
+-        p[3] = in[px + 1 + in_stride * (maxj + 3)];
+-        for(int c = 0; c < 4; c++) col[c] += ((1 - dx) * dy) * p[c];
+-
+-        // lower right 2x2 block
+-        p[0] = in[maxi + 2 + in_stride * (maxj + 2)];
+-        p[1] = in[maxi + 3 + in_stride * (maxj + 2)];
+-        p[2] = in[maxi + 2 + in_stride * (maxj + 3)];
+-        p[3] = in[maxi + 3 + in_stride * (maxj + 3)];
+-        for(int c = 0; c < 4; c++) col[c] += (dx * dy) * p[c];
+-
+-        num = (samples + 1) * (samples + 1);
+-      }
+-      else if(maxi == px + 2 * samples)
+-      {
+-        // right border
+-        for(int j = py + 2; j <= maxj; j += 2)
+-        {
+-          p[0] = in[maxi + 2 + in_stride * j];
+-          p[1] = in[maxi + 3 + in_stride * j];
+-          p[2] = in[maxi + 2 + in_stride * (j + 1)];
+-          p[3] = in[maxi + 3 + in_stride * (j + 1)];
+-          for(int c = 0; c < 4; c++) col[c] += dx * p[c];
+-        }
+-
+-        // upper right
+-        p[0] = in[maxi + 2 + in_stride * py];
+-        p[1] = in[maxi + 3 + in_stride * py];
+-        p[2] = in[maxi + 2 + in_stride * (py + 1)];
+-        p[3] = in[maxi + 3 + in_stride * (py + 1)];
+-        for(int c = 0; c < 4; c++) col[c] += (dx * (1 - dy)) * p[c];
+-
+-        num = ((maxj - py) / 2 + 1 - dy) * (samples + 1);
+-      }
+-      else if(maxj == py + 2 * samples)
+-      {
+-        // lower border
+-        for(int i = px + 2; i <= maxi; i += 2)
+-        {
+-          p[0] = in[i + in_stride * (maxj + 2)];
+-          p[1] = in[i + 1 + in_stride * (maxj + 2)];
+-          p[2] = in[i + in_stride * (maxj + 3)];
+-          p[3] = in[i + 1 + in_stride * (maxj + 3)];
+-          for(int c = 0; c < 4; c++) col[c] += dy * p[c];
+-        }
+-
+-        // lower left 2x2 block
+-        p[0] = in[px + in_stride * (maxj + 2)];
+-        p[1] = in[px + 1 + in_stride * (maxj + 2)];
+-        p[2] = in[px + in_stride * (maxj + 3)];
+-        p[3] = in[px + 1 + in_stride * (maxj + 3)];
+-        for(int c = 0; c < 4; c++) col[c] += ((1 - dx) * dy) * p[c];
+-
+-        num = ((maxi - px) / 2 + 1 - dx) * (samples + 1);
+-      }
+-      else
+-      {
+-        num = ((maxi - px) / 2 + 1 - dx) * ((maxj - py) / 2 + 1 - dy);
+-      }
+-
+-      const int c = (2 * ((y + rggby) % 2) + ((x + rggbx) % 2));
+-      if(num) *outc = col[c] / num;
+-      outc++;
+-    }
+-  }
++  _omaraw_reduce_mosaic(out, in, roi_in->width, roi_in->height, roi_out->width, roi_out->height,
++                        roi_out->scale, out_stride, in_stride, filters, NULL, TRUE);
+ }
+ 
+ /**
+@@ -519,39 +334,8 @@
+                                                    const int32_t in_stride,
+                                                    const uint8_t (*const xtrans)[6])
+ {
+-  const float px_footprint = 1.f / roi_out->scale;
+-  // Use box filter of width px_footprint*2+1 centered on the current
+-  // sample (rounded to nearest input pixel) to anti-alias. Higher MP
+-  // images need larger filters to avoid artifacts.
+-  DT_OMP_FOR()
+-  for(int y = 0; y < roi_out->height; y++)
+-  {
+-    uint16_t *outc = out + out_stride * y;
+-
+-    const float fy = y * px_footprint;
+-    const int miny = MAX(0, (int)roundf(fy - px_footprint));
+-    const int maxy = MIN(roi_in->height-1, (int)roundf(fy + px_footprint));
+-
+-    float fx = 0.0f;
+-    for(int x = 0; x < roi_out->width; x++, fx += px_footprint, outc++)
+-    {
+-      const int minx = MAX(0, (int)roundf(fx - px_footprint));
+-      const int maxx = MIN(roi_in->width-1, (int)roundf(fx + px_footprint));
+-
+-      const int c = FCxtrans(y, x, roi_out, xtrans);
+-      int num = 0;
+-      uint32_t col = 0;
+-
+-      for(int yy = miny; yy <= maxy; ++yy)
+-        for(int xx = minx; xx <= maxx; ++xx)
+-          if(FCxtrans(yy, xx, roi_in, xtrans) == c)
+-          {
+-            col += in[xx + in_stride * yy];
+-            num++;
+-          }
+-      *outc = col / num;
+-    }
+-  }
++  _omaraw_reduce_mosaic(out, in, roi_in->width, roi_in->height, roi_out->width, roi_out->height,
++                        roi_out->scale, out_stride, in_stride, 0, xtrans, FALSE);
+ }
+ 
+ void dt_iop_clip_and_zoom_mosaic_third_size_xtrans_f(float *const out,
+@@ -562,36 +346,8 @@
+                                                      const int32_t in_stride,
+                                                      const uint8_t (*const xtrans)[6])
+ {
+-  const float px_footprint = 1.f / roi_out->scale;
+-  DT_OMP_FOR()
+-  for(int y = 0; y < roi_out->height; y++)
+-  {
+-    float *outc = out + out_stride * y;
+-
+-    const float fy = y * px_footprint;
+-    const int miny = MAX(0, (int)roundf(fy - px_footprint));
+-    const int maxy = MIN(roi_in->height-1, (int)roundf(fy + px_footprint));
+-
+-    float fx = 0.0f;
+-    for(int x = 0; x < roi_out->width; x++, fx += px_footprint, outc++)
+-    {
+-      const int minx = MAX(0, (int)roundf(fx - px_footprint));
+-      const int maxx = MIN(roi_in->width-1, (int)roundf(fx + px_footprint));
+-
+-      const int c = FCxtrans(y, x, roi_out, xtrans);
+-      int num = 0;
+-      float col = 0.f;
+-
+-      for(int yy = miny; yy <= maxy; ++yy)
+-        for(int xx = minx; xx <= maxx; ++xx)
+-          if(FCxtrans(yy, xx, roi_in, xtrans) == c)
+-          {
+-            col += in[xx + in_stride * yy];
+-            num++;
+-          }
+-      *outc = col / (float)num;
+-    }
+-  }
++  _omaraw_reduce_mosaic(out, in, roi_in->width, roi_in->height, roi_out->width, roi_out->height,
++                        roi_out->scale, out_stride, in_stride, 0, xtrans, TRUE);
+ }
+ 
+ void dt_iop_clip_and_zoom_demosaic_passthrough_monochrome_f(float *out,
+@@ -730,6 +486,64 @@
+       outc[2] = pix;
+       outc[3] = 0.0f;
+       outc += 4;
++    }
++  }
++}
++
++// OmaRAW display resampling uses pixel centres and the requested ROI origin.
++// The legacy thumbnail shortcut samples forward from each site and discards
++// the fractional ROI origin, so different mosaic sizes shift edges on screen.
++static void _omaraw_mosaic_preview(float *out, const float *in,
++                                  const dt_iop_roi_t *roi_out, const dt_iop_roi_t *roi_in,
++                                  int out_stride, int in_stride, uint32_t filters,
++                                  const uint8_t (*xtrans)[6])
++{
++  const double step = 1.0 / roi_out->scale;
++  DT_OMP_FOR()
++  for(int y = 0; y < roi_out->height; ++y)
++  {
++    const double cy = (y + roi_out->y) * step - roi_in->y;
++    const double top = cy - step * .5 + .5, bottom = cy + step * .5 + .5;
++    for(int x = 0; x < roi_out->width; ++x)
++    {
++      const double cx = (x + roi_out->x) * step - roi_in->x;
++      const double left = cx - step * .5 + .5, right = cx + step * .5 + .5;
++      double sums[3] = {0}, weights[3] = {0};
++      for(int sy = MAX(0, (int)floor(top)); sy < MIN(roi_in->height, (int)ceil(bottom)); ++sy)
++      {
++        const double wy = MIN(bottom, sy + 1.0) - MAX(top, sy);
++        for(int sx = MAX(0, (int)floor(left)); sx < MIN(roi_in->width, (int)ceil(right)); ++sx)
++        {
++          const int c = xtrans ? xtrans[sy % 6][sx % 6]
++                               : FC(sy, sx, filters);
++          const int channel = c == 3 ? 1 : c;
++          const double w = wy * (MIN(right, sx + 1.0) - MAX(left, sx));
++          sums[channel] += w * in[(size_t)sy * in_stride + sx];
++          weights[channel] += w;
++        }
++      }
++      float *pixel = out + 4 * ((size_t)y * out_stride + x);
++      for(int c = 0; c < 3; ++c)
++      {
++        if(weights[c] == 0.0)
++        {
++          double best = G_MAXDOUBLE;
++          const int ix = CLAMP((int)round(cx), 0, roi_in->width - 1);
++          const int iy = CLAMP((int)round(cy), 0, roi_in->height - 1);
++          for(int sy = MAX(0, iy - 6); sy <= MIN(roi_in->height - 1, iy + 6); ++sy)
++            for(int sx = MAX(0, ix - 6); sx <= MIN(roi_in->width - 1, ix + 6); ++sx)
++            {
++              const int colour = xtrans ? xtrans[sy % 6][sx % 6]
++                                         : FC(sy, sx, filters);
++              const double distance = (sx-cx)*(sx-cx) + (sy-cy)*(sy-cy);
++              if((colour == 3 ? 1 : colour) != c || distance >= best) continue;
++              best = distance;
++              sums[c] = in[(size_t)sy * in_stride + sx]; weights[c] = 1.0;
++            }
++        }
++        pixel[c] = weights[c] > 0.0 ? sums[c] / weights[c] : 0.0f;
++      }
++      pixel[3] = 0.0f;
+     }
+   }
+ }
+@@ -742,6 +556,12 @@
+                                                const int32_t in_stride,
+                                                const uint32_t filters)
+ {
++  if(dt_omaraw_approx_demosaic())
++  {
++    _omaraw_mosaic_preview(out, in, roi_out, roi_in, out_stride, in_stride, filters, NULL);
++    return;
++  }
++
+   // adjust to pixel region and don't sample more than scale/2 nbs!
+   // pixel footprint on input buffer, radius:
+   const float px_footprint = 1.f / roi_out->scale;
+@@ -920,6 +740,12 @@
+                                                        const int32_t in_stride,
+                                                        const uint8_t (*const xtrans)[6])
+ {
++  if(dt_omaraw_approx_demosaic())
++  {
++    _omaraw_mosaic_preview(out, in, roi_out, roi_in, out_stride, in_stride, 0, xtrans);
++    return;
++  }
++
+   const float px_footprint = 1.f / roi_out->scale;
+   const int samples = MAX(1, (int)floorf(px_footprint / 3));
+ 
+--- a/src/develop/pixelpipe_hb.h
++++ b/src/develop/pixelpipe_hb.h
+@@ -79,6 +79,11 @@
+   // cached distorted masks at geometric module boundaries
+   dt_dev_distorted_mask_cache_t detail_mask_cache;
+   dt_dev_distorted_mask_cache_t raster_mask_cache;
++  // OmaRAW: original geometry expressed in reduced-source coordinates.
++  // Optional; zero keeps native engine behaviour. Avoid integer crop/rotation
++  // rounding changing the display origin when swapping source buffers.
++  double omaraw_reference_in_width, omaraw_reference_in_height;
++  double omaraw_reference_out_width, omaraw_reference_out_height;
+ } dt_dev_pixelpipe_iop_t;
+ 
+ typedef enum dt_dev_pixelpipe_change_t
+--- a/src/iop/crop.c
++++ b/src/iop/crop.c
+@@ -580,8 +580,8 @@
+   dt_iop_crop_data_t *d = piece->data;
+   *roi_in = *roi_out;
+ 
+-  const float iw = piece->buf_in.width * roi_out->scale;
+-  const float ih = piece->buf_in.height * roi_out->scale;
++  const double iw = (piece->omaraw_reference_in_width > 0 ? piece->omaraw_reference_in_width : piece->buf_in.width) * roi_out->scale;
++  const double ih = (piece->omaraw_reference_in_height > 0 ? piece->omaraw_reference_in_height : piece->buf_in.height) * roi_out->scale;
+ 
+   roi_in->x += iw * d->cx;
+   roi_in->y += ih * d->cy;
+--- a/src/iop/demosaic.c
++++ b/src/iop/demosaic.c
+@@ -39,6 +39,8 @@
+ #include "gui/accelerators.h"
+ #include "gui/gtk.h"
+ #include "iop/iop_api.h"
++
++#include "common/interpolation.h"
+ 
+ #include <complex.h>
+ #include <glib.h>
+@@ -904,7 +906,8 @@
+ 
+   if(!direct)
+   {
+-    dt_iop_clip_and_zoom_roi((float *)o, out, roi_out, roi_in);
++    dt_interpolation_resample_aligned(dt_interpolation_new(DT_INTERPOLATION_USERPREF),
++                                      (float *)o, roi_out, out, roi_in);
+     dt_free_align(out);
+   }
+ }
+--- a/src/iop/flip.c
++++ b/src/iop/flip.c
+@@ -335,8 +335,9 @@
+     // get corner points of roi_out
+     get_corner(aabb, c, p);
+     // backtransform aabb
+-    backtransform(p, o, d->orientation, piece->buf_out.width * roi_out->scale,
+-                  piece->buf_out.height * roi_out->scale);
++    const double width = piece->omaraw_reference_out_width > 0 ? piece->omaraw_reference_out_width : piece->buf_out.width;
++    const double height = piece->omaraw_reference_out_height > 0 ? piece->omaraw_reference_out_height : piece->buf_out.height;
++    backtransform(p, o, d->orientation, width * roi_out->scale, height * roi_out->scale);
+     // transform to roi_in space, get aabb.
+     adjust_aabb(o, aabb_in);
+   }

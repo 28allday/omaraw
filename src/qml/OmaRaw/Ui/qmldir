@@ -1,0 +1,37 @@
+module OmaRaw.Ui
+singleton Theme 1.0 Theme.qml
+singleton Icons 1.0 Icons.qml
+singleton Names 1.0 Names.qml
+
+Icon 1.0 Icon.qml
+IconButton 1.0 IconButton.qml
+ToolButton 1.0 ToolButton.qml
+TabButton 1.0 TabButton.qml
+SegmentedControl 1.0 SegmentedControl.qml
+SearchField 1.0 SearchField.qml
+ValueField 1.0 ValueField.qml
+SliderField 1.0 SliderField.qml
+EditCoalescer 1.0 EditCoalescer.qml
+StableList 1.0 StableList.qml
+ComboField 1.0 ComboField.qml
+Toggle 1.0 Toggle.qml
+CheckField 1.0 CheckField.qml
+EyeToggle 1.0 EyeToggle.qml
+EffectDot 1.0 EffectDot.qml
+SlideSection 1.0 SlideSection.qml
+AccordionHeader 1.0 AccordionHeader.qml
+Tooltip 1.0 Tooltip.qml
+ContextMenu 1.0 ContextMenu.qml
+AddToAlbumMenu 1.0 AddToAlbumMenu.qml
+MenuAction 1.0 MenuAction.qml
+ScrollBar 1.0 ScrollBar.qml
+SplitterHandle 1.0 SplitterHandle.qml
+EmptyState 1.0 EmptyState.qml
+DockHeader 1.0 DockHeader.qml
+Tip 1.0 Tip.qml
+SavedSettings 1.0 SavedSettings.qml
+FolderPicker 1.0 FolderPicker.qml
+FilePicker 1.0 FilePicker.qml
+PathPicker 1.0 PathPicker.qml
+ModalPanel 1.0 ModalPanel.qml
+NewFolderDialog 1.0 NewFolderDialog.qml

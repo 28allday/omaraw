@@ -1,0 +1,69 @@
+--- a/src/iop/vignette.c
++++ b/src/iop/vignette.c
+@@ -61,10 +61,12 @@
+ {
+   float scale;               // $MIN: 0.0 $MAX: 200.0 $DEFAULT: 80.0 $DESCRIPTION: "fall-off start" Inner radius, percent of largest image dimension
+   float falloff_scale;       // $MIN: 0.0 $MAX: 200.0 $DEFAULT: 50.0 $DESCRIPTION: "fall-off radius" 0 - 100 Radius for falloff -- outer radius = inner radius + falloff_scale
+-  float brightness;          // $MIN: -1.0 $MAX: 1.0 $DEFAULT: -0.5 -1 - 1 Strength of brightness reduction
+-  float saturation;          // $MIN: -1.0 $MAX: 1.0 $DEFAULT: -0.5 -1 - 1 Strength of saturation reduction
++  // OmaRAW: a new vignette does nothing until Amount moves, and leaves the
++  // corners' colour alone unless Saturation asks.
++  float brightness;          // $MIN: -1.0 $MAX: 1.0 $DEFAULT: 0.0 -1 - 1 Strength of brightness reduction
++  float saturation;          // $MIN: -1.0 $MAX: 1.0 $DEFAULT: 0.0 -1 - 1 Strength of saturation reduction
+   dt_iop_vector_2d_t center; // Center of vignette
+-  gboolean autoratio;        // $DEFAULT: FALSE $DESCRIPTION: "automatic ratio"
++  gboolean autoratio;        // $DEFAULT: TRUE $DESCRIPTION: "automatic ratio" OmaRAW: follows the frame
+   float whratio;             // $MIN: 0.0 $MAX: 2.0 $DEFAULT: 1.0 $DESCRIPTION: "width/height ratio" 0-1 = width/height ratio, 1-2 = height/width ratio + 1
+   float shape;               // $MIN: 0.0 $MAX: 5.0 $DEFAULT: 1.0 $DESCRIPTION: "shape"
+   dt_iop_dither_t dithering; // $DEFAULT: DITHER_OFF if and how to perform dithering
+@@ -799,12 +801,17 @@
+           weight = 1.0f;
+         else if(weight <= 0.0f)
+           weight = 0.0f;
+-        else if(dither != 0.0f)
++        else
+         {
+-          // only bother computing the random number if dithering is enabled
++          // OmaRAW: always the smooth (cosine) fall-off, as the OpenCL kernel
++          // has it; the straight ramp showed its start and end as lines.
+           weight = 0.5f - cosf(M_PI_F * weight) / 2.0f;
+-          encrypt_tea(tea_state);
+-          dith = dither * tpdf(tea_state[0]);
++          if(dither != 0.0f)
++          {
++            // only bother computing the random number if dithering is enabled
++            encrypt_tea(tea_state);
++            dith = dither * tpdf(tea_state[0]);
++          }
+         }
+       }
+ 
+@@ -822,9 +829,11 @@
+         }
+         else
+         {
+-          const float falloff = (weight * brightness);
++          // OmaRAW: lighten by scaling, as darkening does (up to twice the
++          // light at +1), not by adding light, which greyed the blacks.
++          const float falloff = (1.0f + (weight * brightness));
+           for_each_channel(c)
+-            col[c] = col[c] + falloff + dith;
++            col[c] = col[c] * falloff + dith;
+         }
+         for_each_channel(c)
+           col[c] = unbound ? col[c] : CLIP(col[c]);
+--- a/data/kernels/extended.cl
++++ b/data/kernels/extended.cl
+@@ -338,9 +338,10 @@
+ 
+   if(weight > 0.0f)
+   {
+-    const float falloff = brightness < 0.0f ? 1.0f + (weight * brightness) : weight * brightness;
++    // OmaRAW: lightening scales, as darkening does (kept in step with the CPU).
++    const float falloff = 1.0f + (weight * brightness);
+ 
+-    pixel.xyz = (brightness < 0.0f ? pixel * falloff + dith : pixel + falloff + dith).xyz;
++    pixel.xyz = (pixel * falloff + dith).xyz;
+ 
+     pixel.xyz = unbound ? pixel.xyz : clamp(pixel, (float4)0.0f, (float4)1.0f).xyz;
+ 

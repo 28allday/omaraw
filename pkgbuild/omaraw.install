@@ -1,0 +1,45 @@
+installing_person() {
+  [ -n "${SUDO_USER-}" ] && [ "$SUDO_USER" != root ] || return 1
+  skill_uid="$(id -u "$SUDO_USER" 2>/dev/null)" || return 1
+  [ "$skill_uid" != 0 ] || return 1
+  [ -z "${SUDO_UID-}" ] || [ "$SUDO_UID" = "$skill_uid" ] || return 1
+  printf '%s\n' "$SUDO_USER"
+}
+
+link_skill() {
+  skill_person="$(installing_person)" || {
+    echo "OmaRAW includes an agent skill. Run as your user: omaraw skill --link"
+    return 0
+  }
+  if runuser -u "$skill_person" -- env OMA_GPU=cpu OMA_GPU_UI=software \
+       /usr/bin/omaraw skill --link >/dev/null 2>&1; then
+    echo "OmaRAW's agent skill is installed for $skill_person; start a new agent session."
+  else
+    echo "OmaRAW is installed. Check agent skill links with: omaraw skill --link"
+    echo "Existing custom skills are preserved."
+  fi
+}
+
+post_install() {
+  link_skill
+}
+
+post_upgrade() {
+  link_skill
+}
+
+post_remove() {
+  skill_person="$(installing_person)" || return 0
+  # Remove only our package's links, with the user's permissions.
+  runuser -u "$skill_person" -- /bin/sh -c '
+    for place in "$HOME/.agents/skills" "$HOME/.claude/skills" \
+                 "$HOME/.codex/skills" "$HOME/.pi/agent/skills" \
+                 "$HOME/.hermes/skills" "$HOME"/.hermes/profiles/*/skills; do
+      skill_link="$place/omaraw"
+      if [ -L "$skill_link" ] &&
+         [ "$(readlink "$skill_link")" = /usr/share/omaraw/skills/omaraw ]; then
+        rm -f -- "$skill_link"
+      fi
+    done
+  ' || true
+}

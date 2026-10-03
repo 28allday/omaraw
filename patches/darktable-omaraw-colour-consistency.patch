@@ -1,0 +1,406 @@
+--- a/src/common/omaraw_print.h
++++ b/src/common/omaraw_print.h
+@@ -0,0 +1,8 @@
++// SPDX-License-Identifier: GPL-3.0-or-later
++#pragma once
++// Leading member of the private print module's committed per-pipe data.
++typedef struct oma_print_blend_t
++{
++  float strength;
++  int base_tone;
++} oma_print_blend_t;
+--- a/src/develop/blend.c
++++ b/src/develop/blend.c
+@@ -721,6 +721,44 @@
+     }
+   }
+ 
++  // OmaRAW's range eyedropper uses the very same input-channel conversion
++  // as blendif. Store a private raster so crop/rotation/lens correction can
++  // carry it to the clicked output position without modifying the photo.
++  const int sample_channel = piece->pipe->omaraw_range_channel;
++  if(sample_channel >= 0 && sample_channel < 3 && !strcmp(self->op, "exposure")
++     && self->multi_priority == piece->pipe->omaraw_range_priority)
++  {
++    float *shown = dt_alloc_align_float(obuffsize * 4);
++    float *values = dt_alloc_align_float(obuffsize);
++    if(shown && values)
++    {
++      const dt_dev_pixelpipe_display_mask_t lab[] = {
++        DT_DEV_PIXELPIPE_DISPLAY_L, DT_DEV_PIXELPIPE_DISPLAY_LCH_h, DT_DEV_PIXELPIPE_DISPLAY_LCH_C };
++      const dt_dev_pixelpipe_display_mask_t display[] = {
++        DT_DEV_PIXELPIPE_DISPLAY_GRAY, DT_DEV_PIXELPIPE_DISPLAY_HSL_H, DT_DEV_PIXELPIPE_DISPLAY_HSL_S };
++      const dt_dev_pixelpipe_display_mask_t scene[] = {
++        DT_DEV_PIXELPIPE_DISPLAY_GRAY, DT_DEV_PIXELPIPE_DISPLAY_JzCzhz_hz, DT_DEV_PIXELPIPE_DISPLAY_JzCzhz_Cz };
++      gboolean valid = TRUE;
++      if(blend_csp == DEVELOP_BLEND_CS_LAB)
++        dt_develop_blendif_lab_blend(piece, ivoid, shown, roi_in, roi_out, mask, lab[sample_channel]);
++      else if(blend_csp == DEVELOP_BLEND_CS_RGB_DISPLAY)
++        dt_develop_blendif_rgb_hsl_blend(piece, ivoid, shown, roi_in, roi_out, mask, display[sample_channel]);
++      else if(blend_csp == DEVELOP_BLEND_CS_RGB_SCENE)
++        dt_develop_blendif_rgb_jzczhz_blend(piece, ivoid, shown, roi_in, roi_out, mask, scene[sample_channel]);
++      else valid = FALSE;
++      if(valid)
++      {
++        DT_OMP_FOR()
++        for(size_t k = 0; k < obuffsize; ++k)
++          values[k] = blend_csp == DEVELOP_BLEND_CS_RGB_SCENE && sample_channel == 0
++            ? powf(CLAMP(shown[4*k], 0.f, 1.f), 1.f/2.2f) : shown[4*k];
++        g_hash_table_replace(piece->raster_masks, GINT_TO_POINTER(-100), values);
++        values = NULL;
++      }
++    }
++    dt_free_align(shown); dt_free_align(values);
++  }
++
+   // now apply blending with per-pixel opacity value as defined in mask
+   // select the blend operator
+   switch(blend_csp)
+--- a/src/develop/imageop.c
++++ b/src/develop/imageop.c
+@@ -3924,7 +3924,9 @@
+ 
+ gboolean dt_iop_piece_is_raster_mask_used(const dt_dev_pixelpipe_iop_t *piece, const dt_mask_id_t id)
+ {
+-  if(piece->pipe->store_all_raster_masks)
++  if(piece->pipe->store_all_raster_masks
++     || (piece->pipe->omaraw_range_priority >= 0 && !strcmp(piece->module->op, "exposure")
++         && piece->module->multi_priority == piece->pipe->omaraw_range_priority))
+     return TRUE;
+ 
+   GHashTableIter iter;
+--- a/src/develop/pixelpipe_cache.c
++++ b/src/develop/pixelpipe_cache.c
+@@ -137,6 +137,7 @@
+     if(!skipped && included)
+     {
+       hash = dt_hash(hash, &piece->hash, sizeof(piece->hash));
++      hash = dt_hash(hash, &piece->enabled, sizeof(piece->enabled));
+       if(piece->module->request_color_pick != DT_REQUEST_COLORPICK_OFF && roi)
+       {
+         if(darktable.lib->proxy.colorpicker.primary_sample->size == DT_LIB_COLORPICKER_SIZE_BOX)
+--- a/src/develop/pixelpipe_hb.c
++++ b/src/develop/pixelpipe_hb.c
+@@ -16,6 +16,7 @@
+     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
+ */
+ 
++#include "common/omaraw_print.h"
+ #include "common/color_picker.h"
+ #include "common/colorspaces.h"
+ #include "common/histogram.h"
+@@ -293,6 +294,7 @@
+   pipe->backbuf_size = size;
+   pipe->cache_obsolete_order = INT_MAX;
+   pipe->backbuf = NULL;
++  pipe->omaraw_print_buffer = NULL;
+   pipe->backbuf_scale = 0.0f;
+   memset(pipe->backbuf_zoom_pos, 0, sizeof(dt_dev_zoom_pos_t));
+   pipe->output_imgid = NO_IMGID;
+@@ -317,6 +319,7 @@
+   pipe->iop_order_list = NULL;
+   pipe->forms = NULL;
+   pipe->store_all_raster_masks = FALSE;
++  pipe->omaraw_range_priority = pipe->omaraw_range_channel = -1;
+   pipe->work_profile_info = NULL;
+   pipe->input_profile_info = NULL;
+   pipe->output_profile_info = NULL;
+@@ -442,6 +445,8 @@
+   g_free(pipe->icc_filename);
+   pipe->icc_filename = NULL;
+ 
++  dt_free_align(pipe->omaraw_print_buffer);
++  pipe->omaraw_print_buffer = NULL;
+   if(dt_pipe_is_screen(pipe)) g_free(pipe->backbuf);
+   pipe->backbuf = NULL;
+   pipe->backbuf_width = 0;
+@@ -3557,6 +3562,95 @@
+   return ret;
+ }
+ 
++// The bridge requests float linear Rec.709 for every view and writer. Blend
++// two complete paths there, after all tools and before the display/output
++// transform. Piece flags and cache keys are private to this pipe; history
++// and the module enabled flags are never changed by rendering.
++static int _omaraw_tone_bit(const char *op)
++{
++  return !strcmp(op, "sigmoid") ? 1 : !strcmp(op, "filmicrgb") ? 2 : !strcmp(op, "basecurve") ? 4 : 0;
++}
++
++static int _omaraw_print_legacy_base(const dt_develop_t *dev, const dt_iop_module_t *print)
++{
++  int state = 0, baseline = 0, i = 0;
++  gboolean printing = FALSE;
++  for(GList *n = dev->iop; n; n = n->next)
++  {
++    const dt_iop_module_t *m = n->data;
++    if(m->default_enabled) state |= _omaraw_tone_bit(m->op);
++  }
++  for(GList *n = dev->history; n && i < dev->history_end; n = n->next, ++i)
++  {
++    const dt_dev_history_item_t *h = n->data;
++    if(h->module == print)
++    {
++      if(h->enabled && !printing) baseline = state;
++      printing = h->enabled;
++    }
++    const int bit = _omaraw_tone_bit(h->op_name);
++    state = h->enabled ? state | bit : state & ~bit;
++  }
++  return printing ? baseline : state;
++}
++
++int dt_omaraw_print_base_tone(const dt_develop_t *dev, const dt_iop_module_t *print)
++{
++  const int *saved = print->so->get_p ? print->so->get_p(print->params, "base_tone") : NULL;
++  return saved && *saved >= 0 ? *saved & 7 : _omaraw_print_legacy_base(dev, print);
++}
++
++static gboolean _omaraw_process_print(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
++                                      void **buf, void **cl_buf, dt_iop_buffer_dsc_t **format,
++                                      const dt_iop_roi_t *roi, GList *modules, GList *pieces, const int pos)
++{
++  dt_dev_pixelpipe_iop_t *print = NULL;
++  for(GList *n = pipe->nodes; n; n = n->next)
++  {
++    dt_dev_pixelpipe_iop_t *p = n->data;
++    if(p->enabled && !strcmp(p->module->op, "omarawprint")) { print = p; break; }
++  }
++  const oma_print_blend_t *blend = print ? print->data : NULL;
++  if(!blend || blend->strength >= 1.f)
++    return _dev_pixelpipe_process_rec_and_backcopy(pipe, dev, buf, cl_buf, format, roi, modules, pieces, pos);
++
++  const float mix = CLAMP(blend->strength, 0.f, 1.f);
++  const int baseline = blend->base_tone >= 0 ? blend->base_tone & 7 : _omaraw_print_legacy_base(dev, print->module);
++  const int count = g_list_length(pipe->nodes);
++  gboolean *enabled = g_new(gboolean, count);
++  int i = 0;
++  for(GList *n = pipe->nodes; n; n = n->next, ++i)
++  {
++    dt_dev_pixelpipe_iop_t *p = n->data;
++    enabled[i] = p->enabled;
++    const int bit = _omaraw_tone_bit(p->module->op);
++    if(bit) p->enabled = (baseline & bit) != 0;
++    if(p == print) p->enabled = FALSE;
++  }
++  gboolean error = _dev_pixelpipe_process_rec_and_backcopy(pipe, dev, buf, cl_buf, format, roi, modules, pieces, pos);
++  i = 0;
++  for(GList *n = pipe->nodes; n; n = n->next, ++i)
++    ((dt_dev_pixelpipe_iop_t *)n->data)->enabled = enabled[i];
++  g_free(enabled);
++  if(error || mix == 0.f) return error;
++  // OmaRAW's output adapter guarantees this format. Do not interpret a
++  // non-float third-party caller's buffer as floats.
++  if((*format)->datatype != TYPE_FLOAT || (*format)->channels != 4) return TRUE;
++  const size_t samples = (size_t)roi->width * roi->height * 4;
++  pipe->omaraw_print_buffer = dt_alloc_align_float(samples);
++  if(!pipe->omaraw_print_buffer) return TRUE;
++  memcpy(pipe->omaraw_print_buffer, *buf, samples * sizeof(float));
++  error = _dev_pixelpipe_process_rec_and_backcopy(pipe, dev, buf, cl_buf, format, roi, modules, pieces, pos);
++  if(error) return TRUE;
++  if((*format)->datatype != TYPE_FLOAT || (*format)->channels != 4) return TRUE;
++  const float *printed = *buf;
++  float *plain = pipe->omaraw_print_buffer;
++  DT_OMP_FOR()
++  for(size_t k = 0; k < samples; ++k) plain[k] += mix * (printed[k] - plain[k]);
++  *buf = plain;
++  return FALSE;
++}
++
+ gboolean dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe,
+                                   dt_develop_t *dev,
+                                   const int x,
+@@ -3574,6 +3668,9 @@
+   int stopper = dt_atomic_get_int(&pipe->shutdown);
+   while(stopper != DT_DEV_PIXELPIPE_STOP_NODES
+         && !dt_atomic_CAS_int(&pipe->shutdown, &stopper, DT_DEV_PIXELPIPE_PROCESSING)) {}
++  if((void *)pipe->backbuf == (void *)pipe->omaraw_print_buffer) pipe->backbuf = NULL;
++  dt_free_align(pipe->omaraw_print_buffer);
++  pipe->omaraw_print_buffer = NULL;
+   pipe->nocache = dt_pipe_is_image(pipe);
+   pipe->runs++;
+   pipe->opencl_enabled = dt_opencl_running();
+@@ -3614,6 +3711,8 @@
+ // re-entry point: in case of late opencl errors we start all over
+ // again with opencl-support disabled
+ restart:
++  dt_free_align(pipe->omaraw_print_buffer);
++  pipe->omaraw_print_buffer = NULL;
+ 
+   // check if we should obsolete caches
+   if(pipe->cache_obsolete_order != INT_MAX)
+@@ -3643,7 +3742,7 @@
+   dt_print_mem_usage("before pixelpipe process");
+ 
+   // run pixelpipe recursively and get error status
+-  const gboolean err = _dev_pixelpipe_process_rec_and_backcopy(pipe, dev, &buf,
++  const gboolean err = _omaraw_process_print(pipe, dev, &buf,
+                                                                &cl_mem_out, &out_format,
+                                                                &roi,
+                                                                modules, pieces, pos);
+--- a/src/develop/pixelpipe_hb.h
++++ b/src/develop/pixelpipe_hb.h
+@@ -262,6 +262,8 @@
+   GList *forms;
+   // the masks generated in the pipe for later reusal are inside dt_dev_pixelpipe_iop_t
+   gboolean store_all_raster_masks;
++  int omaraw_range_priority, omaraw_range_channel; // private mask sampler, -1 when unused
++  float *omaraw_print_buffer; // owned linear-light blend; never a cache line
+   // module blending cache
+   float *bcache_data;
+   dt_hash_t bcache_hash;
+@@ -493,3 +495,6 @@
+ // vim: shiftwidth=2 expandtab tabstop=2 cindent
+ // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
+ // clang-format on
++
++// Persisted print baseline (bits: sigmoid, filmicrgb, basecurve), with v1 history recovery.
++int dt_omaraw_print_base_tone(const struct dt_develop_t *dev, const struct dt_iop_module_t *print);
+--- a/src/iop/omarawprint.c
++++ b/src/iop/omarawprint.c
+@@ -7,8 +7,9 @@
+ //
+ // Per pixel: log-shaped scene -> A (printing density) -> trim and gain per
+ // layer -> B1 (the print's own curve, per layer) -> B2 (dyes, projector,
+-// observer: screen light) -> blended with the untouched input by strength.
++// observer: screen light). Strength mixes complete paths in the float pixelpipe.
+ #include "common/file_location.h"
++#include "common/omaraw_print.h"
+ #include "common/iop_profile.h"
+ #include "develop/imageop.h"
+ #include "develop/imageop_math.h"
+@@ -18,7 +19,7 @@
+ #include <stdlib.h>
+ #include <string.h>
+ 
+-DT_MODULE_INTROSPECTION(1, dt_iop_omarawprint_params_t)
++DT_MODULE_INTROSPECTION(2, dt_iop_omarawprint_params_t)
+ 
+ #define OMARAW_PRINT_STOCKS 22
+ static const char *const omaraw_print_stock_files[OMARAW_PRINT_STOCKS] = {
+@@ -86,7 +87,22 @@
+   float gain_r;     // $MIN: 0.5 $MAX: 1.5 $DEFAULT: 1.0 $DESCRIPTION: "red density"
+   float gain_g;     // $MIN: 0.5 $MAX: 1.5 $DEFAULT: 1.0 $DESCRIPTION: "green density"
+   float gain_b;     // $MIN: 0.5 $MAX: 1.5 $DEFAULT: 1.0 $DESCRIPTION: "blue density"
++  int base_tone; // $MIN: -1 $MAX: 7 $DEFAULT: -1 $DESCRIPTION: "parked tone mappers"
+ } dt_iop_omarawprint_params_t;
++
++// Older edits recover the enabled state immediately before the print came
++// on. New edits save it explicitly, including zero (no tone mapper).
++int legacy_params(dt_iop_module_t *self, const void *const old_params, const int old_version,
++                  void **new_params, int32_t *new_params_size, int *new_version)
++{
++  if(old_version != 1) return 1;
++  dt_iop_omarawprint_params_t *n = calloc(1, sizeof(*n));
++  if(!n) return 1;
++  memcpy(n, old_params, offsetof(dt_iop_omarawprint_params_t, base_tone));
++  n->base_tone = -1;
++  *new_params = n; *new_params_size = sizeof(*n); *new_version = 2;
++  return 0;
++}
+ 
+ // One stock's tables, as baked (OMPT version 3): a 3x3 to the negative's
+ // layer exposures, then two 1-D curve sets and two size³ cubes, 16-bit,
+@@ -101,8 +117,9 @@
+ 
+ typedef struct dt_iop_omarawprint_data_t
+ {
++  oma_print_blend_t blend; // must stay first: shared with the float pixelpipe
+   const omaraw_print_tables_t *tables;
+-  float strength, trim[3], gain[3];
++  float trim[3], gain[3];
+   float white[9];   // linear Rec.2020 in -> out: a D65 white shown as the chosen white
+   float paper;      // light scale: 1 for the clear base as white, more for a printed white
+ } dt_iop_omarawprint_data_t;
+@@ -186,7 +203,8 @@
+   const dt_iop_omarawprint_params_t *p = (const dt_iop_omarawprint_params_t *)params;
+   dt_iop_omarawprint_data_t *d = piece->data;
+   d->tables = _load(p->stock);
+-  d->strength = p->strength / 100.0f;
++  d->blend.strength = p->strength / 100.0f;
++  d->blend.base_tone = p->base_tone;
+   d->trim[0] = p->trim_r; d->trim[1] = p->trim_g; d->trim[2] = p->trim_b;
+   d->gain[0] = p->gain_r; d->gain[1] = p->gain_g; d->gain[2] = p->gain_b;
+   memcpy(d->white, omaraw_print_white[CLAMP((int)p->white, 0, 3)], sizeof(d->white));
+@@ -252,17 +270,6 @@
+   for(int c = 0; c < 3; c++) light[c] = exp2f(t->ll_min + ll[c] * -t->ll_min);
+ }
+ 
+-// Whether this instance has an item in the applied history: only then were
+-// its settings committed to the pipe. A tone mapper the photo never had
+-// (a JPEG, a PNG) is not the plain rendering, the input is.
+-static gboolean _in_history(const dt_develop_t *dev, const dt_iop_module_t *m)
+-{
+-  int i = 0;
+-  for(const GList *h = dev ? dev->history : NULL; h && i < dev->history_end; h = g_list_next(h), i++)
+-    if(((const dt_dev_history_item_t *)h->data)->module == m) return TRUE;
+-  return FALSE;
+-}
+-
+ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
+              void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+ {
+@@ -270,46 +277,10 @@
+   const omaraw_print_tables_t *const t = d->tables;
+   const float *const in = (const float *)ivoid; float *const out = (float *)ovoid;
+   const size_t pixels = (size_t)roi_out->width * roi_out->height;
+-  // Below full strength the print is blended with the plain rendering: the
+-  // tone mapper the print parked, run on this same tile. Its settings stay
+-  // committed in the pipe while it is off, so this is its own processing,
+-  // not a copy of it; strength 0 is exactly the picture without a print,
+-  // highlights rolled off, not the scene-linear input clipped.
+-  float *plain = NULL;
+-  if(t && d->strength < 1.0f)
+-  {
+-    dt_dev_pixelpipe_iop_t *mapper = NULL;
+-    for(const char *const *op = (const char *const[]){ "sigmoid", "filmicrgb", NULL }; *op && !mapper; op++)
+-      for(GList *n = piece->pipe->nodes; n; n = g_list_next(n))
+-      {
+-        dt_dev_pixelpipe_iop_t *other = n->data;
+-        if(other->data && !other->enabled && dt_iop_module_is(other->module, *op)
+-           && _in_history(self->dev, other->module)) { mapper = other; break; }
+-      }
+-    if(mapper && mapper->module->process)
+-    {
+-      plain = dt_alloc_align_float(pixels * 4);
+-      if(plain)
+-      {
+-        // A parked piece is never run by the pipe, so it has no pixel
+-        // format of its own yet: lend it this piece's, for this call.
+-        const int colors = mapper->colors;
+-        const dt_iop_buffer_dsc_t in_dsc = mapper->dsc_in, out_dsc = mapper->dsc_out;
+-        mapper->colors = piece->colors; mapper->dsc_in = piece->dsc_in; mapper->dsc_out = piece->dsc_out;
+-        mapper->module->process(mapper->module, mapper, ivoid, plain, roi_in, roi_out);
+-        mapper->colors = colors; mapper->dsc_in = in_dsc; mapper->dsc_out = out_dsc;
+-      }
+-    }
+-  }
+-  const float *const base = plain ? plain : in;
+-  if(!t || d->strength <= 0.0f)
+-  {
+-    memcpy(out, base, pixels * 4 * sizeof(float));
+-    for(size_t k = 0; plain && k < pixels; k++) out[4 * k + 3] = in[4 * k + 3];
+-    dt_free_align(plain);
+-    return;
+-  }
+-  const float s = d->strength, paper = d->paper;
++  // The shared float pixelpipe blends complete print/plain renderings. A
++  // tone mapper must run at its own position, before the late colour tools.
++  if(!t) { memcpy(out, in, pixels * 4 * sizeof(float)); return; }
++  const float paper = d->paper;
+   // The stock's measurements, its white matrix and paper weights are all in
+   // linear Rec. 2020. A pipe working in another space (the Working profile
+   // control, or an edit brought from elsewhere) is taken there and back, the
+@@ -347,11 +318,9 @@
+     for(int c = 0; c < 3; c++) shown[c] = d->white[c * 3 + 0] * light[0] + d->white[c * 3 + 1] * light[1] + d->white[c * 3 + 2] * light[2];
+     for(int c = 0; c < 3; c++)
+       back[c] = convert ? from2020[c][0] * shown[0] + from2020[c][1] * shown[1] + from2020[c][2] * shown[2] : shown[c];
+-    const float *const b = base + 4 * k;
+-    for(int c = 0; c < 3; c++) q[c] = b[c] + s * (back[c] - b[c]);
++    for(int c = 0; c < 3; c++) q[c] = back[c];
+     q[3] = p[3];
+   }
+-  dt_free_align(plain);
+ }
+ 
+ void init_pipe(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
