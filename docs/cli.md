@@ -201,9 +201,9 @@ Set `strength` to 0 or disable `omarawprint` to restore the normal rendering.
 ## Local AI masking and removal
 
 `ops --filter ai.` lists the AI methods and settings. `inspect` reports whether
-the optional runtime is installed. Install it explicitly with
-`{"ops":[{"op":"ai.install"}]}`; this downloads the same runtime and models
-as the GUI. `ai.useGpu` defaults to CPU and accepts a boolean setting.
+the included runtime is available. Models and runtime libraries come with the
+package; no download or setup operation is needed. Reinstall the package if
+`ai.installed` is false. `ai.useGpu` defaults to CPU and accepts a boolean setting.
 
 An AI draft lasts for one `apply` process. Start, select and accept/save in the
 same operations list. Coordinates run from 0 to 1 across the displayed photo,
@@ -260,8 +260,8 @@ the next begins. Results include AI `state`; successful saving includes
 `wrote`. Missing tools, invalid draft state and worker errors fail the operation.
 Editing the photo invalidates an unfinished selection/removal draft, as in the GUI.
 
-AI denoise has its own optional download, `denoise.install()`, and namespace
-(`ops --filter denoise.`). It automatically detects Bayer or X-Trans from the original RAW before edits:
+AI denoise includes both sensor models and uses its own namespace
+(`ops --filter denoise.`). No download or setup is needed. It automatically detects Bayer or X-Trans from the original RAW before edits:
 
 ```json
 {"photo": 12, "ops": [

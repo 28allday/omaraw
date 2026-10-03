@@ -1,4 +1,5 @@
 #include "aiservice.h"
+#include "airuntime.h"
 #include "engineservice.h"
 #include "displaycolour.h"
 #include "colourpipeline.h"
@@ -116,8 +117,7 @@ QString AiService::result() const {
 }
 
 QString AiService::home() const {
-    const QString override = qEnvironmentVariable("OMARAW_AI_HOME");
-    return override.isEmpty() ? QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + "/omaraw/ai/v2" : override;
+    return AiRuntime::home("OMARAW_AI_HOME", "ai", "ai/v2");
 }
 
 bool AiService::installed() const {
@@ -134,8 +134,9 @@ bool AiService::installed() const {
 }
 
 bool AiService::prepareScripts() {
+    if (AiRuntime::bundled(home())) return QFileInfo::exists(home() + "/scripts/worker.py");
     if (!QDir().mkpath(home() + "/scripts")) return false;
-    for (const QString name : {"worker.py", "setup.py", "models.json", "LICENSES.txt"}) {
+    for (const QString name : {"worker.py", "models.json", "LICENSES.txt"}) {
         QFile source(":/ai/" + name); QSaveFile target(home() + "/scripts/" + name);
         if (!source.open(QIODevice::ReadOnly) || !target.open(QIODevice::WriteOnly)) return false;
         const auto data = source.readAll();
@@ -316,16 +317,14 @@ void AiService::brushStroke(const QVariantList &points, bool subtract) {
 
 void AiService::install() {
     if (m_busy) return;
-    stopProcess();
-    if (!prepareScripts()) { failed(tr("Cannot write the local AI tools folder.")); return; }
-    m_installing = true; m_status = tr("Installing local AI tools…"); setBusy(true);
-    m_timeout.start(20 * 60 * 1000);
-    m_process.start("python3", {home() + "/scripts/setup.py", home()});
+    m_status = installed() ? tr("Local AI tools are included and ready.")
+                          : tr("Reinstall the OmaRAW package to restore its included AI tools.");
+    emit changed();
 }
 
 void AiService::start(const QString &mode) {
     if (m_busy || m_sourcePending || (mode != "mask" && mode != "remove")) return;
-    if (!installed()) { failed(tr("Download local AI tools first.")); return; }
+    if (!installed()) { failed(tr("The included AI tools are missing or damaged. Reinstall the OmaRAW package.")); return; }
     if (!m_engine->maintenanceReady() || m_engine->cropMode()) { failed(tr("Wait for the photo to finish rendering and close Crop first.")); return; }
     const QImage image = m_engine->plainCopy().scaled(1600, 1600, Qt::KeepAspectRatio, Qt::SmoothTransformation);
     if (image.isNull()) { failed(tr("Open a photo first.")); return; }
@@ -394,7 +393,7 @@ void AiService::send(const QVariantMap &request) {
     m_idle.stop();
     if (m_process.state() == QProcess::NotRunning) {
         if (!prepareScripts()) { failed(tr("Cannot prepare local AI tools.")); return; }
-        m_process.start(home() + "/venv/bin/python", {"-u", home() + "/scripts/worker.py", "--home", home(), "--backend", m_gpu ? "vulkan" : "cpu"});
+        m_process.start(home() + "/venv/bin/python", {"-I", "-B", "-u", home() + "/scripts/worker.py", "--home", home(), "--backend", m_gpu ? "vulkan" : "cpu"});
     }
     QVariantMap message = request; message["id"] = ++m_request; m_action = message.value("action").toString();
     setBusy(true); m_timeout.start(5 * 60 * 1000);

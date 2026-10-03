@@ -200,7 +200,7 @@ class Inference:
             except OSError:
                 valid = False
             if not valid:
-                raise ModelError("An AI model is missing or damaged. Download / update AI tools to repair it.")
+                raise ModelError("An included AI model is missing or damaged. Reinstall the OmaRAW package.")
             self.verified.add(name)
         options = ort.SessionOptions()
         options.intra_op_num_threads = 6

@@ -2,7 +2,7 @@
 # bin/package snapshots the app and fills its checksum in this template.
 
 pkgname=omaraw
-pkgver=0.1.0beta1
+pkgver=0.1.0beta2
 pkgrel=1
 url='https://github.com/28allday/omaraw'
 pkgdesc='Catalog, cull, develop and export photographs'
@@ -19,9 +19,10 @@ depends=(
   'libtiff' 'zlib' 'opencv' 'openjpeg2' 'hicolor-icon-theme'
   'xdg-desktop-portal' 'libplacebo' 'vulkan-icd-loader'
   'wayland' 'qt6-wayland' 'gdk-pixbuf2' 'icu' 'cairo' 'pango' 'util-linux'
+  'bzip2' 'expat' 'gdbm' 'libffi' 'libnsl' 'libxcrypt' 'openssl' 'tzdata'
+  'mpdecimal' 'zstd' 'xz' 'readline' 'ncurses'
 )
 optdepends=(
-  'python: optional local AI masking and removal tools'
   'vulkan-radeon: GPU processing and interface on AMD graphics'
   'nvidia-utils: GPU processing and interface on NVIDIA graphics'
   'vulkan-intel: GPU processing and interface on Intel graphics'
@@ -29,7 +30,7 @@ optdepends=(
   'gphoto2: command-line camera tools alongside tethering'
   'xdg-desktop-portal-gtk: file dialogs where the desktop has no portal of its own'
 )
-makedepends=('cmake' 'ninja' 'python' 'intltool' 'libxslt' 'iso-codes' 'vulkan-headers')
+makedepends=('cmake' 'ninja' 'python' 'python-pip' 'patchelf' 'intltool' 'libxslt' 'iso-codes' 'vulkan-headers')
 checkdepends=('desktop-file-utils')
 
 _dt=281f60c9957b05b9379084b272c81a5e62fa46e3
@@ -50,6 +51,7 @@ source=(
   "libxcf-$_xcf.tar.gz::https://codeload.github.com/houz/libxcf/tar.gz/$_xcf"
   "whereami-$_whereami.tar.gz::https://codeload.github.com/gpakosz/whereami/tar.gz/$_whereami"
   "LibRaw-$_libraw.tar.gz::https://codeload.github.com/LibRaw/LibRaw/tar.gz/$_libraw"
+@AI_SOURCES@
 )
 sha256sums=(
   '@OMARAW_SHA256@'
@@ -60,6 +62,10 @@ sha256sums=(
   'c7f51c387729f22534b953740ae6d1a5096e24688aeb640c08bf9cf25f169e2b'
   '57fa59e0c8ddb80849c8ee7e35b446f8449cdcd9186a9c716e4c1b64e9cc4480'
   'f3c70df0f3e2638e5a84fb3b31c580a26e8ad395242589b063787225e0e41510'
+@AI_SHA256SUMS@
+)
+noextract=(
+@AI_NOEXTRACT@
 )
 
 prepare() {
@@ -144,6 +150,7 @@ _engine_environment() {
 }
 
 build() {
+  python3 "$srcdir/omaraw-$pkgver/tools/package-ai.py" "$srcdir" "$srcdir/ai-stage"
   cmake -S "$srcdir/darktable-$_dt" -B "$srcdir/engine-build" -G Ninja \
     -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$_prefix" \
     -DCMAKE_INSTALL_LIBDIR=lib -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
@@ -185,6 +192,7 @@ check() {
 
 package() {
   local app="$srcdir/omaraw-$pkgver"
+  cp -a --no-preserve=ownership "$srcdir/ai-stage/." "$pkgdir/"
   install -Dm755 "$srcdir/app-build/omaraw" "$pkgdir/usr/bin/omaraw"
   install -d "$pkgdir$_prefix/lib" "$pkgdir$_prefix/share"
   cp -a --no-preserve=ownership "$srcdir/engine-stage$_prefix/lib/darktable" "$pkgdir$_prefix/lib/"

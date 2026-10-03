@@ -52,7 +52,7 @@ Nothing is statically linked from a GPL-incompatible source, and the
 GPL-2.0-or-later components (Exiv2, potrace) are used under their
 "or later" option.
 
-## Optional AI denoise
+## Included AI tools and denoise
 
 Automatic X-Trans processing uses RawForge’s Restormer release asset, locally
 promoted to float32 with fixed tile dimensions. Bayer retains the Heavy model.
@@ -67,12 +67,24 @@ The CFA input transform follows [RawHandler](https://github.com/rymuelle/RawHand
 phase-preserving borders and residual denoising. Full notices are embedded in
 `src/denoise/LICENSES.txt` and installed as `AI-DENOISE.txt`.
 
-RawForge's heavy ONNX model is an optional direct upstream download. The
-manifest pins its original and converted SHA-256 hashes and records the
-project's MIT licence. No separate model-weight licence was located; weight
-redistribution must be confirmed before publishing a bundled model. The optional denoise weights and training photographs are not shipped in this package.
-The separately installed rawpy, LibRaw, NumPy, Pillow, ONNX, ONNX Runtime,
-WebGPU provider and tifffile retain their notices in the isolated environment.
+The package includes SAM 2.1 selection and LaMa removal models under their
+upstream Apache-2.0 licences, reproduced in `src/ai/LICENSES.txt`.
+The Bayer Heavy and X-Trans Restormer ONNX assets are distributed in RawForge's
+MIT-licensed project release `onnx_v1.0.0`; no separate model-weight licence is
+published. OmaRAW distributes its float32 conversions under that upstream
+project licence, preserving the copyright notice and conversion details. The
+manifest pins original and converted SHA-256 hashes. Training photographs are
+not included; no separate author permission is claimed.
+
+A private Python 3.14 interpreter (PSF-2.0) is included with its standard library
+and licence. It does not depend on the system Python version. The complete
+source bundle also contains the matching Python source archive.
+
+The included rawpy, LibRaw, NumPy, Pillow, ONNX, ONNX Runtime, WebGPU provider,
+tifffile and supporting Python packages retain their notices in the isolated
+runtime and `ai-runtime/` licence directory. `pkgbuild/ai-sources.json` pins every
+binary/source input. The complete source bundle includes rawpy's matching source
+and LibRaw submodules for its bundled shared library.
 See [AI denoise](docs/AI-DENOISE.md) for provenance and limitations.
 
 ## Trademarks

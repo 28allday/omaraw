@@ -7,6 +7,7 @@ development engine are never included. Dirty snapshots record their diff hash.
 import gzip
 import hashlib
 import io
+import json
 from pathlib import Path
 import os
 import re
@@ -73,6 +74,13 @@ assert template.count("@OMARAW_SHA256@") == 1
 install_script = (root / "pkgbuild/omaraw.install").read_bytes()
 (out / "omaraw.install").write_bytes(install_script)
 assert template.count("@INSTALL_SHA256@") == 1
+ai_sources = json.loads((root / "pkgbuild/ai-sources.json").read_text())["sources"]
 (out / "PKGBUILD").write_text(template.replace("@OMARAW_SHA256@", checksum)
-                             .replace("@INSTALL_SHA256@", hashlib.sha256(install_script).hexdigest()))
+                             .replace("@INSTALL_SHA256@", hashlib.sha256(install_script).hexdigest())
+                             .replace("@AI_SOURCES@", "\n".join(
+                                 f"  '{e['name']}::{e['url']}'" for e in ai_sources))
+                             .replace("@AI_SHA256SUMS@", "\n".join(
+                                 f"  '{e['sha256']}'" for e in ai_sources))
+                             .replace("@AI_NOEXTRACT@", "\n".join(
+                                 f"  '{e['name']}'" for e in ai_sources)))
 print(f"Source snapshot: {archive}\nSHA256: {checksum}\nRevision: {revision}" + (" (working changes included)" if diff else ""))

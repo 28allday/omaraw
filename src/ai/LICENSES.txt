@@ -1,7 +1,10 @@
-OmaRAW optional local AI model notices
+OmaRAW included local AI model notices
 
 Runtime packages retain their own notices in the isolated environment.
-Model download provenance and hashes are recorded in models.json.
+Model provenance and hashes are recorded in models.json. Models are bundled
+with the package, with their upstream licences below. Runtime source URLs and
+checksums are recorded in pkgbuild/ai-sources.json and the installed
+ai-runtime/sources.json notice.
 
 
 SAM 2 / exported SAM 2.1 model (Apache-2.0)

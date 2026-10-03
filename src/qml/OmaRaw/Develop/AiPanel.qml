@@ -46,10 +46,9 @@ Column {
         width: parent.width; spacing: Theme.s2; visible: !engine.ai.installed && (!root.compact || root.showSetup)
         Text {
             width: parent.width; wrapMode: Text.WordWrap
-            text: qsTr("Download or update the local AI tools (about 500 MB for a fresh install). Photos are processed on this computer.")
+            text: qsTr("AI tools are included with OmaRAW. Their files are missing or damaged; reinstall the OmaRAW package to restore them. Photos are processed on this computer.")
             font.family: Theme.fontFamily; font.pixelSize: Theme.fsLabel; color: Theme.textMuted
         }
-        ToolButton { text: qsTr("Download / update AI tools"); enabled: !engine.ai.busy; onClicked: engine.ai.install() }
     }
     Column {
         width: parent.width; spacing: Theme.s2; visible: root.selecting

@@ -21,7 +21,7 @@
         "url": "https://github.com/rymuelle/RawForge/releases/download/onnx_v1.0.0/ShadowWeightedL1_24_deep_500.onnx"
       },
       "projectLicense": "MIT",
-      "licenseScope": "Upstream project licence; no separate model-weight licence published. Weights are optional upstream downloads, not bundled with OmaRAW.",
+      "licenseScope": "Included float32 conversion of an asset from RawForge's MIT-licensed project release; no separate model-weight licence published. Upstream copyright and licence retained.",
       "project": "https://github.com/rymuelle/RawForge/tree/79f17700c29765b28a4cf5bd1b6d90bc7e3eb7f2",
       "conversion": "FLOAT16 tensors, value types and Cast targets promoted to FLOAT by setup.py (onnx 1.23.0)",
       "sensor": "bayer",
@@ -30,7 +30,7 @@
     },
     {
       "projectLicense": "MIT",
-      "licenseScope": "Upstream project licence; no separate model-weight licence published. Weights are optional upstream downloads, not bundled with OmaRAW.",
+      "licenseScope": "Included float32 conversion of an asset from RawForge's MIT-licensed project release; no separate model-weight licence published. Upstream copyright and licence retained.",
       "project": "https://github.com/rymuelle/RawForge/tree/79f17700c29765b28a4cf5bd1b6d90bc7e3eb7f2",
       "name": "restormer-xtrans.onnx",
       "sensor": "xtrans",

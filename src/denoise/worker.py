@@ -319,7 +319,7 @@ class Inference:
         except OSError:
             pass
         if not valid:
-            raise ModelError("Denoise model is missing or damaged. Download / update AI denoise to repair it.")
+            raise ModelError("An included denoise model is missing or damaged. Reinstall the OmaRAW package.")
         self.condition = np.array([[min(iso, 65535) / 6400]], np.float32)
         options = ort.SessionOptions()
         options.intra_op_num_threads = min(6, os.cpu_count() or 1)
@@ -571,7 +571,8 @@ if __name__ == "__main__":
     parser.add_argument("--request", required=True)
     args = parser.parse_args()
     try:
-        with (Path(args.home) / "install.lock").open("a") as lock:
+        mode = "rb" if (Path(args.home) / "bundled").is_file() else "a"
+        with (Path(args.home) / "install.lock").open(mode) as lock:
             fcntl.flock(lock, fcntl.LOCK_SH | fcntl.LOCK_NB)
             process(args.home, json.loads(Path(args.request).read_text()))
     except ModelError as error:

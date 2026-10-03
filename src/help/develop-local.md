@@ -42,7 +42,7 @@ highlights and shadows; **Detail** for clarity, sharpness and colour moiré.
 
 ## AI object masks
 
-Choose **AI object mask**. Download the local models/tools on first use. Click
+Choose **AI object mask**. The models and tools are included and work offline. Click
 an object, right-click to exclude a point, or drag a box around it. Add points
 to refine the selection. **AI brush** lets you paint inside the object and
 release to have AI find its outline. Right-drag over unwanted areas to exclude

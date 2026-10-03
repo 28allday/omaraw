@@ -1,0 +1,217 @@
+{
+  "schema": 1,
+  "python": "3.14",
+  "sources": [
+    {
+      "name": "flatbuffers-25.12.19-py2.py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/e8/2d/d2a548598be01649e2d46231d151a6c56d10b964d94043a335ae56ea2d92/flatbuffers-25.12.19-py2.py3-none-any.whl",
+      "sha256": "7634f50c427838bb021c2d66a3d1168e9d199b0607e6329399f04846d42e20b4",
+      "bytes": 26661,
+      "kind": "wheel",
+      "project": "flatbuffers",
+      "version": "25.12.19"
+    },
+    {
+      "name": "ml_dtypes-0.6.0-cp314-cp314-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl",
+      "url": "https://files.pythonhosted.org/packages/1c/b1/1831dd8c9b06c013085d31a2ac4f03392d43bd36bfc6ff591a08bcedc1cf/ml_dtypes-0.6.0-cp314-cp314-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl",
+      "sha256": "8f490c003369ce60e514a0c3b12374f05274c101fee1bead6740ec8a564032b0",
+      "bytes": 409966,
+      "kind": "wheel",
+      "project": "ml_dtypes",
+      "version": "0.6.0"
+    },
+    {
+      "name": "numpy-2.5.3-cp314-cp314-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl",
+      "url": "https://files.pythonhosted.org/packages/45/8f/9beacf79ca7c650688ad0baa80931adb988fe6e6e5d5903c23cc3dbd70eb/numpy-2.5.3-cp314-cp314-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl",
+      "sha256": "b0521d0f4aebb6e06189451025fa17a913287b13c03d5fe05c017333b654ea5b",
+      "bytes": 16711928,
+      "kind": "wheel",
+      "project": "numpy",
+      "version": "2.5.3"
+    },
+    {
+      "name": "onnx-1.23.0-cp312-abi3-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl",
+      "url": "https://files.pythonhosted.org/packages/09/86/63cdd5740f566fd9de2cadc106529adee0566f2fcafe69a65767eedc1681/onnx-1.23.0-cp312-abi3-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl",
+      "sha256": "f336004196a22fbdc16c62e7f26f20635af1826db6147c80ff3b4b8d428fc7ef",
+      "bytes": 8881347,
+      "kind": "wheel",
+      "project": "onnx",
+      "version": "1.23.0"
+    },
+    {
+      "name": "onnxruntime-1.30.0-cp314-cp314-manylinux_2_28_x86_64.whl",
+      "url": "https://files.pythonhosted.org/packages/f1/38/8138eed225c5bc6ddfc05879ecac7dacc63c34b9b6f99be72839c1f6dc49/onnxruntime-1.30.0-cp314-cp314-manylinux_2_28_x86_64.whl",
+      "sha256": "8b611d24db2954545ce6bd9acd4670183cb368e4642450de7a9ab6474eb374ec",
+      "bytes": 23586333,
+      "kind": "wheel",
+      "project": "onnxruntime",
+      "version": "1.30.0"
+    },
+    {
+      "name": "onnxruntime_ep_webgpu-0.4.0-py3-none-manylinux_2_28_x86_64.whl",
+      "url": "https://files.pythonhosted.org/packages/c1/96/2a18a45079250afcd825687aef2895de266d5abc1cff9f52d2dede7598f2/onnxruntime_ep_webgpu-0.4.0-py3-none-manylinux_2_28_x86_64.whl",
+      "sha256": "5d8c961eda91a88961cad1fb7621f389f006b18497d6ea9ecf96f729f066cbfb",
+      "bytes": 6892120,
+      "kind": "wheel",
+      "project": "onnxruntime-ep-webgpu",
+      "version": "0.4.0"
+    },
+    {
+      "name": "packaging-26.3-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/63/34/ba1c580383c9eada3711951fef0795c80b829a078d72188184bcab9dd527/packaging-26.3-py3-none-any.whl",
+      "sha256": "d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c",
+      "bytes": 129956,
+      "kind": "wheel",
+      "project": "packaging",
+      "version": "26.3"
+    },
+    {
+      "name": "pillow-12.3.0-cp314-cp314-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl",
+      "url": "https://files.pythonhosted.org/packages/5c/44/c85361f65dbe00eea8576ee467c768d25129989efb76e94f205e9ca9bb46/pillow-12.3.0-cp314-cp314-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl",
+      "sha256": "251bf95b67017e27b13d82f5b326234ca62d70f9cf4c2b9032de2358a3b12c7b",
+      "bytes": 6936962,
+      "kind": "wheel",
+      "project": "pillow",
+      "version": "12.3.0"
+    },
+    {
+      "name": "protobuf-7.36.2-cp310-abi3-manylinux2014_x86_64.whl",
+      "url": "https://files.pythonhosted.org/packages/db/f3/3996583dd2906297a637af12114deddf7658af6e683fedb83be061983fb5/protobuf-7.36.2-cp310-abi3-manylinux2014_x86_64.whl",
+      "sha256": "89f23aa53c24553a2416fd4fd1ec06f74fa42b14b546d8883128813f775bbfd2",
+      "bytes": 343223,
+      "kind": "wheel",
+      "project": "protobuf",
+      "version": "7.36.2"
+    },
+    {
+      "name": "rawpy-0.26.1-cp314-cp314-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl",
+      "url": "https://files.pythonhosted.org/packages/8e/c7/32209a59deda0e0449cbbc69fa395dad8f984a61c83ea39a27b12a669fc2/rawpy-0.26.1-cp314-cp314-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl",
+      "sha256": "c5400d5fdcbca0c72012093c907885475b77a20656d26a2729f140c43ccfcd70",
+      "bytes": 1847122,
+      "kind": "wheel",
+      "project": "rawpy",
+      "version": "0.26.1"
+    },
+    {
+      "name": "tifffile-2026.9.20-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/05/bf/04f3e61cb20a03678ca43f29bae9a7d0b7d9f563b86f5f600b2d8fba9712/tifffile-2026.9.20-py3-none-any.whl",
+      "sha256": "9b913167b8f66a57f2e7c0454486c4c4607196d494797461226166bd0755c0e6",
+      "bytes": 275004,
+      "kind": "wheel",
+      "project": "tifffile",
+      "version": "2026.9.20"
+    },
+    {
+      "name": "typing_extensions-4.16.0-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/49/d3/b8441a820a491ddfc024b0b0cf0393375b75ea13866d9c66727e54c2fc80/typing_extensions-4.16.0-py3-none-any.whl",
+      "sha256": "481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8",
+      "bytes": 45571,
+      "kind": "wheel",
+      "project": "typing_extensions",
+      "version": "4.16.0"
+    },
+    {
+      "name": "ai-sam2.encoder.onnx",
+      "url": "https://huggingface.co/nrl-ai/samexporter-onnx-models/resolve/5050a79cd4b912dd745fff83047c4ef6fbd97be5/sam2_1_hiera_tiny/sam2.1_hiera_tiny.encoder.onnx",
+      "sha256": "3d5ae796097a6afb1198ceea4187ecaa82736242d07f5658541829d6dfc3f871",
+      "bytes": 109471931,
+      "kind": "model",
+      "group": "ai",
+      "model": "sam2.encoder.onnx"
+    },
+    {
+      "name": "ai-sam2.decoder.onnx",
+      "url": "https://huggingface.co/nrl-ai/samexporter-onnx-models/resolve/5050a79cd4b912dd745fff83047c4ef6fbd97be5/sam2_1_hiera_tiny/sam2.1_hiera_tiny.decoder.onnx",
+      "sha256": "197f1c7c8fd070aaf6f15ffc635f4c384422ba5eaa0f8c9e543e3d4b8e0e8e87",
+      "bytes": 16519561,
+      "kind": "model",
+      "group": "ai",
+      "model": "sam2.decoder.onnx"
+    },
+    {
+      "name": "ai-lama.onnx",
+      "url": "https://huggingface.co/Carve/LaMa-ONNX/resolve/c3c0c9e468934d62e79c329e35d82dd09ff8c444/lama_fp32.onnx",
+      "sha256": "1faef5301d78db7dda502fe59966957ec4b79dd64e16f03ed96913c7a4eb68d6",
+      "bytes": 208044816,
+      "kind": "model",
+      "group": "ai",
+      "model": "lama.onnx"
+    },
+    {
+      "name": "denoise-ShadowWeightedL1_24_deep_500.onnx",
+      "url": "https://github.com/rymuelle/RawForge/releases/download/onnx_v1.0.0/ShadowWeightedL1_24_deep_500.onnx",
+      "sha256": "0074e2f7bec359c613305811c2c4e7123f738010fb3a98ce67044c48ecfc0129",
+      "bytes": 21863084,
+      "kind": "model",
+      "group": "denoise",
+      "model": "denoise.onnx"
+    },
+    {
+      "name": "denoise-restormer.onnx",
+      "url": "https://github.com/rymuelle/RawForge/releases/download/onnx_v1.0.0/restormer.onnx",
+      "sha256": "751a8f51c660fe03fe349db3e7c509df736da587e2f80617e98cbde07b2b8d29",
+      "bytes": 55601279,
+      "kind": "model",
+      "group": "denoise",
+      "model": "restormer-xtrans.onnx"
+    },
+    {
+      "name": "rawpy-0.26.1.tar.gz",
+      "url": "https://codeload.github.com/letmaik/rawpy/tar.gz/refs/tags/v0.26.1",
+      "sha256": "9ed0023e6d52a0160813c502f54130f78e0cc3e50ea7e43edb90fe7e10f4a747",
+      "bytes": 75995385,
+      "kind": "source",
+      "project": "rawpy"
+    },
+    {
+      "name": "rawpy-LibRaw-0b56545a4f828743f28a4345cdfdd4c49f9f9a2a.tar.gz",
+      "url": "https://codeload.github.com/LibRaw/LibRaw/tar.gz/0b56545a4f828743f28a4345cdfdd4c49f9f9a2a",
+      "sha256": "f3c73ae4b296cc7510613636bad62c0ea3ab46204c8d6732f5da62d7b406f964",
+      "bytes": 602813,
+      "kind": "source",
+      "project": "rawpy"
+    },
+    {
+      "name": "rawpy-LibRaw-cmake-6e26c9e73677dc04f9eb236a97c6a4dc225ba7e8.tar.gz",
+      "url": "https://codeload.github.com/LibRaw/LibRaw-cmake/tar.gz/6e26c9e73677dc04f9eb236a97c6a4dc225ba7e8",
+      "sha256": "d0ecc870bb395ca05d4de61314d092437bb37afac1e17131cc64c58e57369a11",
+      "bytes": 14141,
+      "kind": "source",
+      "project": "rawpy"
+    },
+    {
+      "name": "rawpy-LibRaw-demosaic-pack-GPL2-ffea825e121e92aa780ae587b65f80fc5847637c.tar.gz",
+      "url": "https://codeload.github.com/LibRaw/LibRaw-demosaic-pack-GPL2/tar.gz/ffea825e121e92aa780ae587b65f80fc5847637c",
+      "sha256": "b04f887f72b62db1bf7cd6322ffc8eb5b101df278d74ab9394c176caa1b6ef94",
+      "bytes": 30767,
+      "kind": "source",
+      "project": "rawpy"
+    },
+    {
+      "name": "rawpy-LibRaw-demosaic-pack-GPL3-f0895891fdaa775255af02275fce426a5bf5c9fc.tar.gz",
+      "url": "https://codeload.github.com/LibRaw/LibRaw-demosaic-pack-GPL3/tar.gz/f0895891fdaa775255af02275fce426a5bf5c9fc",
+      "sha256": "d78d9f76892905c3d576f78726dde709d5b9b603e4c02aa4964d8be7e9420087",
+      "bytes": 38894,
+      "kind": "source",
+      "project": "rawpy"
+    },
+    {
+      "name": "python-3.14.7-1-x86_64.pkg.tar.zst",
+      "url": "https://archive.archlinux.org/packages/p/python/python-3.14.7-1-x86_64.pkg.tar.zst",
+      "sha256": "8a350ce53aae01ae687f043b301931e411bf06333ba480b42b3b5432a0e6c79b",
+      "bytes": 14184166,
+      "kind": "interpreter",
+      "project": "Python",
+      "version": "3.14.7"
+    },
+    {
+      "name": "Python-3.14.7.tar.xz",
+      "url": "https://www.python.org/ftp/python/3.14.7/Python-3.14.7.tar.xz",
+      "sha256": "3b48dac8fb59f62eaa67ac83c1eb12bda1b7a08406dd286e252c11a66be27f81",
+      "bytes": 24053924,
+      "kind": "source",
+      "project": "Python",
+      "version": "3.14.7"
+    }
+  ]
+}

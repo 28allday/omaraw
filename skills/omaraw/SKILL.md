@@ -95,7 +95,7 @@ could be several, and never pass `--new-catalog` unless starting one on purpose.
 | Presets | `catalog.presets()` to list; select one with `catalog.applyPreset(name)` or `engine.applyPresetValues(<its values>)` (replaces the previous preset; `applyValues` only patches settings). `catalog.saveCurrentPreset(name, groups)` uses the keys from `engine.settingsGroups()`, e.g. `film`, not the display label `Film` |
 | Camera profiles | `inspect --photo` → `develop.cameraProfile` lists the camera, compatible `profiles` and included `cameraLook`. `engine.applyCameraLook()` applies the included look; `engine.selectCameraProfile(key)` selects a returned DCP key (empty restores automatic colour); `engine.importCameraProfile(path)` imports the user's DCP. `catalog.setCameraProfilesFolder(path)` adds a search folder |
 | Creative profiles | `develop.creativeProfiles` lists keys for `engine.selectCreativeProfile(key)`. `engine.importCreativeProfile(path)` imports CUBE/supported enhanced XMP. Amount: `engine.setParam("omarawprofile","amount",value)` |
-| AI masks / removal | `ops --filter ai.` and `inspect` → `ai` report the optional runtime. Use the single-run sequence below; `ai.useGpu=false` uses CPU |
+| AI masks / removal | `ops --filter ai.` and `inspect` → `ai` report the included runtime. Use the single-run sequence below; `ai.useGpu=false` uses CPU |
 | Copy an edit | `engine.copySettings(groups)` then `engine.pasteSettings()` on another photo, or `engine.applyValuesTo(items, values)` |
 | Snapshots / variants | `catalog.saveSnapshot(id, name)`, `catalog.createVariant(id)` |
 | Organise | `catalog.setTitle(text, id)`, `setCaption(text, id)`, `addKeyword(k)` / `removeKeyword(k)` (on the selection), `createAlbum(name, parentId 0)` → id, `addSelectionToAlbum(albumId)`, `select(id)` |
@@ -114,9 +114,9 @@ the accepted mask's priority. Coordinates are 0–1 in the edited photo; a
 third `true` argument to `ai.point` excludes a point.
 
 For removal, use `ai.start("remove")`, selection, `ai.remove()`, then
-`ai.apply()` in one run. This automatically names a 16-bit TIFF result, stacks
-it with the source and opens it; `wrote` names it. `ai.saveCopy(path)` provides an
-explicit filename. The current look is baked into removal results. Read
+`ai.apply()` in one run. Apply saves an editable repair on the current photo;
+it does not create a TIFF. `ai.saveCopy(path)` optionally writes a rendered DNG
+with the current look baked in; `wrote` names that copy. Read
 `catalog.aiVersions` for original/intermediate/latest IDs. With a named photo,
 `catalog.openAiOriginal()`, `catalog.openLatestAiVersion()` or
 `catalog.openAiVersion(id)` switches versions, preserving independent edits.
@@ -125,9 +125,10 @@ to continue editing it. Version links persist in the catalogue. `ai.brushStroke`
 list of `[x,y]` points plus an optional subtraction boolean. Read AI state
 from each result row or properties such as `ai.hasSelection`. Calls wait for
 processing and report worker failures. Editing the photo cancels a draft.
-`ai.install()` explicitly downloads tools/models if needed; it is not automatic.
-**AI denoise** uses its own optional runtime: `denoise.installed`,
-`denoise.install()`. Set `denoise.strength` (0–1, default 0.6),
+All AI models and runtime libraries are packaged for offline use. No install
+operation or model download is needed. If `ai.installed` or `denoise.installed`
+is false, report that the OmaRAW package needs reinstalling.
+**AI denoise:** set `denoise.strength` (0–1, default 0.6),
 `denoise.backend` (`auto` qualifies Vulkan against CPU; `cpu` forces CPU),
 then `denoise.apply()` with a named Bayer or X-Trans RAW. It chooses an unused
 `-denoised.dng` name beside the original. `denoise.saveCopy("/absolute/unused-name.dng")`

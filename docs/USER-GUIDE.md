@@ -14,6 +14,10 @@ Close the screen or press **Escape** to quit. The quote changes between launches
 and works offline; click the photographer's name to visit its source. You can
 pause the animation, and the Reduced motion preference uses a still image.
 
+AI masking, object removal, RAW denoising and subject tagging include their models
+and runtime libraries. They work offline after installation, without further
+downloads or setup. Photos are processed on your computer.
+
 ### The workflow
 
 1. **Browse** folders in the Library (Ctrl+I), preview the photos and tick those you want. **Import N photos** adds them in place, or copies, moves or verifies them into a destination you choose.
@@ -829,7 +833,7 @@ The raw conversion itself (turning the sensor's mosaic of red, green and blue in
 
 ### AI denoise
 
-Download the optional local tools once, then start around **60% Strength**.
+The models and tools are included and work offline. Start around **60% Strength**.
 **Preview denoise** shows a selected area with your current colour and exposure
 adjustments, including Auto. **Fit** centres the whole area; **100%** lets you
 judge fine texture at one image pixel per screen pixel. Drag directly on the
@@ -1052,7 +1056,7 @@ highlights and shadows; **Detail** for clarity, sharpness and colour moiré.
 
 ### AI object masks
 
-Choose **AI object mask**. Download the local models/tools on first use. Click
+Choose **AI object mask**. The models and tools are included and work offline. Click
 an object, right-click to exclude a point, or drag a box around it. Add points
 to refine the selection. **AI brush** lets you paint inside the object and
 release to have AI find its outline. Right-drag over unwanted areas to exclude
@@ -1154,7 +1158,7 @@ Remove blemishes, sensor dust and small distractions.
 
 Open **Prepare**, or use the AI object removal shortcut here.
 
-Choose **AI object removal**, downloading local AI tools on first use. Click
+Choose **AI object removal**. Its models and tools are included and work offline. Click
 an object, right-click to exclude, or drag a box. Switch to **Brush** to include
 shadows, reflections or missed parts; right-drag erases. You can also brush a
 removal without first selecting an object. **Undo selection** restores the

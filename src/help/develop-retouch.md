@@ -6,7 +6,7 @@ Remove blemishes, sensor dust and small distractions.
 
 Open **Prepare**, or use the AI object removal shortcut here.
 
-Choose **AI object removal**, downloading local AI tools on first use. Click
+Choose **AI object removal**. Its models and tools are included and work offline. Click
 an object, right-click to exclude, or drag a box. Switch to **Brush** to include
 shadows, reflections or missed parts; right-drag erases. You can also brush a
 removal without first selecting an object. **Undo selection** restores the

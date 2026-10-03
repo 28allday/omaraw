@@ -1,7 +1,7 @@
 # Local AI denoise
 
-Open **Prepare → AI denoise** in Develop. The optional runtime and models
-are downloaded when you choose to install them. Denoising runs on your computer;
+Open **Prepare → AI denoise** in Develop. The runtime and both sensor models
+are included in the package, ready for offline use. Denoising runs on your computer;
 photographs are not uploaded and no online account is needed.
 
 ## Preview and apply
@@ -35,8 +35,8 @@ change those. Sensor-only settings remain with the original.
   processing can take hours on large photographs. Try a detail preview first.
 - The output is a full-size float DNG and may be much larger than the original.
   Keep enough free space for the result and temporary processing.
-- Cancel stops remaining processing. A damaged or missing runtime/model can be
-  downloaded again from the panel.
+- Cancel stops remaining processing. Reinstall the OmaRAW package to restore
+  a damaged or missing runtime or model; the app does not download replacements.
 
 ## Photo versions
 
@@ -47,17 +47,17 @@ removal for the normal RAW workflow.
 
 ## Sources and licences
 
-The Bayer TreeNet and X-Trans Restormer models are downloaded from
-[RawForge's ONNX release](https://github.com/rymuelle/RawForge/releases/tag/onnx_v1.0.0).
-Downloads are checked against pinned hashes and prepared locally for processing.
-The model weights are optional downloads and are not included in the package.
-Their separate redistribution terms remain unconfirmed; see the
-[third-party notices](../THIRD_PARTY.md).
+The included Bayer TreeNet and X-Trans Restormer models come from
+[RawForge's ONNX release](https://github.com/rymuelle/RawForge/releases/tag/onnx_v1.0.0),
+distributed by the MIT-licensed upstream project. The package build checks pinned
+hashes and converts the models to float32 before installation. Original and
+converted hashes, conversion details and the upstream project licence are
+recorded in the [third-party notices](../THIRD_PARTY.md) and model manifest.
 
 RawForge and RawHandler code is MIT-licensed. The adapted Malvar filters come
 from colour-demosaicing under BSD-3-Clause. Full attribution and licence text
 are in [the denoise notices](../src/denoise/LICENSES.txt), installed with OmaRAW
-as `AI-DENOISE.txt`. The processing implementation and download manifest are
+as `AI-DENOISE.txt`. The processing implementation and model manifest are
 included in the application's source.
 
 See [AI tools](AI-TOOLS.md) for masks and object removal, or the

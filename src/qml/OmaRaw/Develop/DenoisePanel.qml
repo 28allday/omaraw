@@ -18,10 +18,9 @@ Column {
         visible: !root.denoise.installed
         Text {
             width: parent.width; wrapMode: Text.WordWrap
-            text: qsTr("One optional download (about 160 MB; allow 750 MB on disk). Photos stay on this computer.")
+            text: qsTr("AI denoise is included with OmaRAW. Its files are missing or damaged; reinstall the OmaRAW package to restore them. Photos stay on this computer.")
             color: Theme.textMuted; font.family: Theme.fontFamily; font.pixelSize: Theme.fsLabel
         }
-        ToolButton { objectName: "installAiDenoise"; text: qsTr("Download / update AI denoise"); enabled: !root.denoise.busy; onClicked: root.denoise.install() }
     }
     Column {
         x: Theme.s3; width: parent.width - 2*x; spacing: Theme.s2

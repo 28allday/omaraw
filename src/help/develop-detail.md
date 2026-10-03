@@ -15,7 +15,7 @@ The raw conversion itself (turning the sensor's mosaic of red, green and blue in
 
 ## AI denoise
 
-Download the optional local tools once, then start around **60% Strength**.
+The models and tools are included and work offline. Start around **60% Strength**.
 **Preview denoise** shows a selected area with your current colour and exposure
 adjustments, including Auto. **Fit** centres the whole area; **100%** lets you
 judge fine texture at one image pixel per screen pixel. Drag directly on the

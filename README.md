@@ -13,7 +13,7 @@ camera; GPU acceleration depends on its driver.
 
 ## Install
 
-Download the first beta package from
+Download the beta package from
 [Releases](https://github.com/28allday/omaraw/releases).
 
 On Omarchy or Arch Linux:
@@ -42,7 +42,7 @@ then install:
 
 ```sh
 sha256sum --check --ignore-missing SHA256SUMS
-sudo pacman -U ./omaraw-0.1.0beta1-1-x86_64.pkg.tar.zst
+sudo pacman -U ./omaraw-0.1.0beta2-1-x86_64.pkg.tar.zst
 ```
 
 Continue only if the package checksum reports **OK**.
@@ -100,9 +100,10 @@ Right-click an edited photograph and choose **Copy Settings…**, then **Paste
 Settings** on your selection. **Sync Settings…** transfers the adjustment groups
 you choose across a batch.
 
-Optional AI tools make object selections, remove objects and denoise RAWs.
-Their models download when requested; photograph processing stays on your
-computer. Automatic subject tags use a small model included with the app.
+AI tools make object selections, remove objects and denoise RAWs. All models
+and AI runtime libraries are included in the package and work offline after
+installation, with no further downloads or setup. Photograph processing stays
+on your computer. Automatic subject tags also use an included model.
 See [AI tools](docs/AI-TOOLS.md) and [AI denoise](docs/AI-DENOISE.md) for support
 and requirements.
 

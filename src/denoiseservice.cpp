@@ -1,4 +1,5 @@
 #include "denoiseservice.h"
+#include "airuntime.h"
 #include "engineservice.h"
 #include "aiservice.h"
 #include "metadata.h"
@@ -92,8 +93,7 @@ DenoiseService::DenoiseService(EngineService *engine) : QObject(engine), m_engin
 }
 DenoiseService::~DenoiseService() { stop(); }
 QString DenoiseService::home() const {
-    const auto override = qEnvironmentVariable("OMARAW_DENOISE_HOME");
-    return override.isEmpty() ? QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + "/omaraw/denoise/v1" : override;
+    return AiRuntime::home("OMARAW_DENOISE_HOME", "denoise", "denoise/v1");
 }
 bool DenoiseService::installed() const {
     QFile ready(home() + "/ready.json"), manifest(":/denoise/models.json");
@@ -107,8 +107,9 @@ bool DenoiseService::installed() const {
     return true;
 }
 bool DenoiseService::prepareScripts() {
+    if (AiRuntime::bundled(home())) return QFileInfo::exists(home() + "/scripts/worker.py");
     if (!QDir().mkpath(home() + "/scripts")) return false;
-    for (const QString &name : {"worker.py", "setup.py", "models.json", "LICENSES.txt"}) {
+    for (const QString &name : {"worker.py", "models.json", "LICENSES.txt"}) {
         QFile source(":/denoise/" + name); QSaveFile out(home() + "/scripts/" + name);
         if (!source.open(QIODevice::ReadOnly) || !out.open(QIODevice::WriteOnly)) return false;
         const auto bytes = source.readAll();
@@ -189,11 +190,9 @@ void DenoiseService::fail(const QString &message) {
 }
 void DenoiseService::install() {
     if (!mutableSetting()) return;
-    if (!prepareScripts()) { fail(tr("Cannot write the local denoise folder.")); return; }
-    m_output.clear(); m_errors.clear(); m_answer.clear(); m_busy = true; m_installing = true;
-    m_status = tr("Installing local AI denoise…"); m_progress = 0; emit changed();
-    m_timeout.start(25 * 60 * 1000);
-    m_process.start("python3", {home() + "/scripts/setup.py", home()});
+    m_status = installed() ? tr("AI denoise is included and ready.")
+                          : tr("Reinstall the OmaRAW package to restore its included denoise tools.");
+    emit changed();
 }
 void DenoiseService::preview() { start("preview"); }
 void DenoiseService::previewAt(double x, double y) {
@@ -254,7 +253,7 @@ void DenoiseService::saveCopy(const QString &fileOrUrl) {
 }
 void DenoiseService::start(const QString &action, const QString &destination, bool keepPreview) {
     if (!mutableSetting()) return;
-    if (!installed()) { fail(tr("Download / update AI denoise first.")); return; }
+    if (!installed()) { fail(tr("The included denoise tools are missing or damaged. Reinstall the OmaRAW package.")); return; }
     if (m_engine->imageId() < 0 || !m_engine->maintenanceReady() || static_cast<AiService *>(m_engine->ai())->busy()) {
         fail(tr("Open a RAW photo and wait for processing to finish.")); return;
     }
@@ -301,7 +300,7 @@ void DenoiseService::launch() {
     const auto data = QJsonDocument::fromVariant(m_request).toJson(QJsonDocument::Compact);
     if (!request.open(QIODevice::WriteOnly) || request.write(data) != data.size() || !request.commit()) { fail(tr("Cannot write the denoise request.")); return; }
     m_timeout.start(5 * 60 * 1000);
-    m_process.start(home() + "/venv/bin/python", {home() + "/scripts/worker.py", "--home", home(), "--request", request.fileName()});
+    m_process.start(home() + "/venv/bin/python", {"-I", "-B", home() + "/scripts/worker.py", "--home", home(), "--request", request.fileName()});
 }
 void DenoiseService::readOutput() {
     m_output += m_process.readAllStandardOutput();

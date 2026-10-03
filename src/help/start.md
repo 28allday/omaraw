@@ -10,6 +10,10 @@ Close the screen or press **Escape** to quit. The quote changes between launches
 and works offline; click the photographer's name to visit its source. You can
 pause the animation, and the Reduced motion preference uses a still image.
 
+AI masking, object removal, RAW denoising and subject tagging include their models
+and runtime libraries. They work offline after installation, without further
+downloads or setup. Photos are processed on your computer.
+
 ## The workflow
 
 1. **Browse** folders in the Library (Ctrl+I), preview the photos and tick those you want. **Import N photos** adds them in place, or copies, moves or verifies them into a destination you choose.

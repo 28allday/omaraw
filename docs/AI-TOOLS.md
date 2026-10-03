@@ -1,6 +1,6 @@
 # Local AI tools
 
-Choose **AI object mask**. Download the local models/tools on first use. Click
+Choose **AI object mask**. The models and tools are included and work offline. Click
 an object, right-click to exclude a point, or drag a box around it. Add points
 to refine the selection. **AI brush** lets you paint inside the object and
 release to have AI find its outline. Right-drag over unwanted areas to exclude
@@ -34,4 +34,4 @@ Cancel/Escape, changing the photo or changing its edit clears the draft.
 
 See the [user guide](USER-GUIDE.md) for the complete workflow.
 
-AI object removal is described in [Retouch](../src/help/develop-retouch.md); RAW denoising has its own [guide](AI-DENOISE.md). Model sources, fixed checksums and licences are recorded in [src/ai/LICENSES.txt](../src/ai/LICENSES.txt) and [src/denoise/LICENSES.txt](../src/denoise/LICENSES.txt). Downloads are optional and require an Internet connection; inference runs locally.
+AI object removal is described in [Retouch](../src/help/develop-retouch.md); RAW denoising has its own [guide](AI-DENOISE.md). Model sources, fixed checksums and licences are recorded in [src/ai/LICENSES.txt](../src/ai/LICENSES.txt) and [src/denoise/LICENSES.txt](../src/denoise/LICENSES.txt). All models and runtime dependencies are included in the package; no first-use download is needed. Inference runs locally. Reinstall the package if a model is missing or damaged.

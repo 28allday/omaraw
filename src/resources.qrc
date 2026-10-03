@@ -189,13 +189,11 @@
     </qresource>
     <qresource prefix="/ai">
         <file alias="worker.py">ai/worker.py</file>
-        <file alias="setup.py">ai/setup.py</file>
         <file alias="models.json">ai/models.json</file>
         <file alias="LICENSES.txt">ai/LICENSES.txt</file>
     </qresource>
     <qresource prefix="/denoise">
         <file alias="worker.py">denoise/worker.py</file>
-        <file alias="setup.py">denoise/setup.py</file>
         <file alias="models.json">denoise/models.json</file>
         <file alias="LICENSES.txt">denoise/LICENSES.txt</file>
     </qresource>

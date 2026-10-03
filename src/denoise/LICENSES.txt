@@ -1,10 +1,10 @@
-OmaRAW optional AI denoise
+OmaRAW included AI denoise
 
 RawForge / RawHandler: https://github.com/rymuelle/RawForge and https://github.com/rymuelle/RawHandler
 RawForge X-Trans preparation: LibRaw linear, unbalanced camera RGB; Restormer input has no ISO conditioning.
 Camera calibration fallback reads the existing RawSpeed cameras.xml, by RawSpeed contributors, under CC-BY-SA 3.0 (https://creativecommons.org/licenses/by-sa/3.0/). Its existing attribution accompanies the private engine; the database is not duplicated here.
 RawHandler Bayer CFA transform adapted by OmaRAW: phase-preserving borders, float32 tiles and residual output.
-Model provenance and conversion are recorded in models.json. Upstream project is MIT; no separate weight licence was published. Model files are optional upstream downloads and are not shipped in the application package. This is not a claim that downloading resolves redistribution terms; a public model bundle requires confirmation of the weight terms.
+Model provenance and conversion are recorded in models.json. The Heavy and Restormer ONNX assets are distributed in RawForge's MIT-licensed project release (onnx_v1.0.0); upstream publishes no separate model-weight licence. OmaRAW includes float32 conversions under the upstream project licence reproduced below. This identifies the published licence, not a separate permission from the author. Training photographs are not included.
 
 MIT License
 
