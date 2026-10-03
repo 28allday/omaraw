@@ -25,9 +25,16 @@ separate purposes; see [offline originals](OFFLINE.md).
 The viewer is SDR. Use your display's calibration profile where available and
 review the result on the display and output you intend to use.
 
-If the interface cannot initialise the graphics device, OmaRAW attempts a
-software restart. For troubleshooting, you can start it with CPU processing
-and software rendering explicitly:
+If an accelerated processing job cannot allocate graphics resources, OmaRAW
+releases that processing context's GPU resources and uses its CPU fallback
+for the rest of the session. Your adjustments still apply.
+
+If the interface cannot initialise its graphics device or can no longer create
+its display surface, OmaRAW closes its workers and releases the catalog locks
+before attempting a restart with CPU processing and software rendering. The
+reopened window reports the recovery. A further interface failure exits instead
+of repeatedly restarting. For troubleshooting, you can start it in this mode
+explicitly:
 
 ```sh
 OMA_GPU=cpu OMA_GPU_UI=software omaraw

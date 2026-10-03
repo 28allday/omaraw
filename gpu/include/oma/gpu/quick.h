@@ -11,9 +11,12 @@ int quickProbeMain(QGuiApplication &);
 // Also observes newly shown Quick windows, including controls' popup windows,
 // and attaches graceful renderer-error recovery before their first frame.
 QString selectQuickBackend(QGuiApplication &);
-// Reports renderer creation failures as a graceful application exit. The app
+// Reports renderer creation and swapchain failures as a graceful app exit. The app
 // must unwind its services and locks before calling restartQuickSoftware.
 constexpr int QuickSoftwareRestart = 73;
 void guardQuickWindow(QQuickWindow *);
+// Preserves the requested exit across nested startup/chooser event loops.
+// Zero means no renderer failure has requested an exit.
+int quickRecoveryExitCode();
 int restartQuickSoftware(int argc, char **argv);
 }

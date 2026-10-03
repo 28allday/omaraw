@@ -25,6 +25,9 @@
 namespace OCIO = OCIO_NAMESPACE;
 namespace oma::gpu {
 namespace {
+// Resource failures must retire the device and its pools. Refusing a job for
+// its dimensions or unsupported shader features is a separate, harmless case.
+struct ResourceFailure : std::runtime_error { using std::runtime_error::runtime_error; };
 using Clock = std::chrono::steady_clock;
 double elapsed(Clock::time_point start) { return std::chrono::duration<double, std::milli>(Clock::now() - start).count(); }
 bool cancelled(const std::atomic_bool *flag) { return flag && flag->load(); }
@@ -234,11 +237,14 @@ struct Context::State {
         }
     };
     std::map<std::string, Shader> colours;
-    ~State() {
+    void releaseDevice() {
         colours.clear();
+        foregroundSource.reset();
         if (vk) { for (auto &tex : texturePool) pl_tex_destroy(vk->gpu, &tex); pl_tex_destroy(vk->gpu, &pool[0]); pl_tex_destroy(vk->gpu, &pool[1]); pl_tex_destroy(vk->gpu, &foregroundPool); }
+        texturePool.clear();
         pl_dispatch_destroy(&dispatch); pl_vulkan_destroy(&vk); pl_log_destroy(&log);
     }
+    ~State() { releaseDevice(); }
     // One process, one verdict: a Vulkan loader that has no usable device
     // is not entered again by a later context (some loaders fault when
     // enumerating without a driver), and instance creation is serialised.
@@ -280,7 +286,7 @@ struct Context::State {
         }
         pl_tex_params tp{}; tp.w = w; tp.h = h; tp.d = d; tp.format = fmt; tp.sampleable = true; tp.initial_data = data;
         pl_tex tex = pl_tex_create(vk->gpu, &tp);
-        if (!tex) throw std::runtime_error("Cannot upload OCIO LUT");
+        if (!tex) throw ResourceFailure("Cannot upload OCIO LUT");
         return std::shared_ptr<Lut>(new Lut{vk->gpu, tex, uint64_t(w) * std::max(1u,h) * std::max(1u,d) * (channels == 1 ? 4 : 16), name, interpolation == OCIO::INTERP_NEAREST ? PL_TEX_SAMPLE_NEAREST : PL_TEX_SAMPLE_LINEAR});
     }
     const Shader &colourShader(const OCIO::ConstProcessorRcPtr &processor) {
@@ -333,7 +339,7 @@ struct Context::State {
         if (variables) { params.variables = variables->data(); params.num_variables = variables->size(); }
         if (!pl_shader_custom(sh, &params)) { pl_dispatch_abort(dispatch, &sh); throw std::runtime_error("Vulkan shader construction failed"); }
         pl_dispatch_params dp{}; dp.shader = &sh; dp.target = to;
-        if (!pl_dispatch_finish(dispatch, &dp)) throw std::runtime_error(lastError().empty() ? "Vulkan shader dispatch failed" : lastError());
+        if (!pl_dispatch_finish(dispatch, &dp)) throw ResourceFailure(lastError().empty() ? "Vulkan shader dispatch failed" : lastError());
     }
     // A chain-only pipeline is per-pixel: it runs in horizontal bands sized
     // to the budget, so a whole sensor's worth of float RGBA never has to
@@ -358,20 +364,20 @@ struct Context::State {
             tp.sampleable = tp.storable = tp.renderable = tp.host_readable = tp.host_writable = true;
             for (int i = 0; i < 2; ++i) {
                 if (!pool[i] || pool[i]->params.w != tp.w || pool[i]->params.h != tp.h) ++stats.imageAllocations;
-                if (!pl_tex_recreate(vk->gpu, &pool[i], &tp)) throw std::runtime_error("Vulkan image allocation failed");
+                if (!pl_tex_recreate(vk->gpu, &pool[i], &tp)) throw ResourceFailure("Vulkan image allocation failed");
             }
             pl_dispatch_reset_frame(dispatch);
             pl_tex_transfer_params upload{}; upload.tex = pool[0];
             upload.ptr = const_cast<char *>(reinterpret_cast<const char *>(input.pixels) + size_t(y0) * input.rowBytes);
             upload.row_pitch = input.rowBytes;
-            if (!pl_tex_upload(vk->gpu, &upload)) throw std::runtime_error("Vulkan image upload failed");
+            if (!pl_tex_upload(vk->gpu, &upload)) throw ResourceFailure("Vulkan image upload failed");
             stats.uploadedBytes += rowBytes * rows;
             pass(pool[0], pool[1], body, nullptr, nullptr, &header, &uniforms.variables);
             pl_tex_transfer_params download{}; download.tex = pool[1];
             download.ptr = into ? reinterpret_cast<char *>(into) + size_t(y0) * intoRowBytes
                                 : reinterpret_cast<char *>(output.rgba.data()) + size_t(y0) * rowBytes;
             download.row_pitch = into ? intoRowBytes : rowBytes;
-            if (!pl_tex_download(vk->gpu, &download)) throw std::runtime_error("Vulkan image download failed");
+            if (!pl_tex_download(vk->gpu, &download)) throw ResourceFailure("Vulkan image download failed");
             stats.downloadedBytes += rowBytes * rows;
         }
         stats.usedVulkan = true;
@@ -395,17 +401,17 @@ struct Context::State {
         tp.sampleable = tp.storable = tp.renderable = tp.host_readable = tp.host_writable = true;
         for (auto &tex : pool) {
             if (!tex || tex->params.w != tp.w || tex->params.h != tp.h) ++stats.imageAllocations;
-            if (!pl_tex_recreate(vk->gpu, &tex, &tp)) throw std::runtime_error("Vulkan image allocation failed");
+            if (!pl_tex_recreate(vk->gpu, &tex, &tp)) throw ResourceFailure("Vulkan image allocation failed");
         }
         while (texturePool.size() > textureSlots) { pl_tex_destroy(vk->gpu, &texturePool.back()); texturePool.pop_back(); }
         texturePool.resize(textureSlots, nullptr);
         for (auto &tex : texturePool) {
             if (!tex || tex->params.w != tp.w || tex->params.h != tp.h) ++stats.imageAllocations;
-            if (!pl_tex_recreate(vk->gpu, &tex, &tp)) throw std::runtime_error("Vulkan Texture allocation failed");
+            if (!pl_tex_recreate(vk->gpu, &tex, &tp)) throw ResourceFailure("Vulkan Texture allocation failed");
         }
         pl_dispatch_reset_frame(dispatch);
         pl_tex_transfer_params upload{}; upload.tex = pool[0]; upload.ptr = const_cast<float *>(input.pixels); upload.row_pitch = input.rowBytes;
-        if (!pl_tex_upload(vk->gpu, &upload)) throw std::runtime_error("Vulkan image upload failed");
+        if (!pl_tex_upload(vk->gpu, &upload)) throw ResourceFailure("Vulkan image upload failed");
         stats.uploadedBytes += imageBytes;
         int current = 0;
         const std::string sample = "ivec2 pos=ivec2(gl_GlobalInvocationID.xy); vec4 source=texelFetch(oma_input,pos,0);\n";
@@ -466,9 +472,9 @@ struct Context::State {
                 if (foregroundSource != op.foreground) {
                     auto fp = tp; fp.storable = fp.renderable = fp.host_readable = false;
                     if (!foregroundPool || foregroundPool->params.w != fp.w || foregroundPool->params.h != fp.h) ++stats.imageAllocations;
-                    if (!pl_tex_recreate(vk->gpu, &foregroundPool, &fp)) throw std::runtime_error("Vulkan composite allocation failed");
+                    if (!pl_tex_recreate(vk->gpu, &foregroundPool, &fp)) throw ResourceFailure("Vulkan composite allocation failed");
                     pl_tex_transfer_params transfer{}; transfer.tex = foregroundPool; transfer.ptr = const_cast<float *>(op.foreground->rgba.data());
-                    if (!pl_tex_upload(vk->gpu, &transfer)) throw std::runtime_error("Vulkan composite upload failed");
+                    if (!pl_tex_upload(vk->gpu, &transfer)) throw ResourceFailure("Vulkan composite upload failed");
                     stats.uploadedBytes += op.foreground->rgba.size() * sizeof(float);
                     foregroundSource = op.foreground;
                 }
@@ -478,7 +484,7 @@ struct Context::State {
         }
         Image output(input.width, input.height);
         pl_tex_transfer_params download{}; download.tex = pool[current]; download.ptr = output.rgba.data();
-        if (!pl_tex_download(vk->gpu, &download)) throw std::runtime_error("Vulkan image download failed");
+        if (!pl_tex_download(vk->gpu, &download)) throw ResourceFailure("Vulkan image download failed");
         stats.downloadedBytes += output.rgba.size() * sizeof(float);
         return output;
     }
@@ -525,11 +531,19 @@ struct Context::State {
             if (caps.vulkan && !failed) {
                 try { result.image = gpu(input, ops, result, cancel, into, intoRowBytes); result.usedVulkan = into ? result.usedVulkan && !cancelled(cancel) : result.image.valid(); }
                 catch (const std::exception &e) {
-                    failed = pl_gpu_is_failed(vk->gpu);
+                    failed = dynamic_cast<const ResourceFailure *>(&e) || pl_gpu_is_failed(vk->gpu);
                     result.fallbackReason = e.what();
-                    if (failed) { caps.vulkan = false; caps.reason = result.fallbackReason; }
-                    // An unsupported job does not disable unrelated operations.
-                    if (admission != admitted.end()) admitted.erase(admission);
+                    if (failed) {
+                        caps.vulkan = false; caps.reason = result.fallbackReason;
+                        admitted.clear();
+                        // An allocation failure need not mark libplacebo's
+                        // device lost. Keeping its pools and qualifying each
+                        // new slider value would keep starving the interface.
+                        releaseDevice();
+                    } else if (admission != admitted.end()) {
+                        // An unsupported job does not disable unrelated work.
+                        admitted.erase(admission);
+                    }
                 }
             } else
 #endif

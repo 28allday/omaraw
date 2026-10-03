@@ -7,7 +7,7 @@
 #include <QDebug>
 #include <QEvent>
 #include <atomic>
-#include <memory>
+#include <cstdio>
 #if QT_CONFIG(vulkan) && __has_include(<vulkan/vulkan.h>)
 #define OMA_QUICK_VULKAN 1
 #include <QVulkanInstance>
@@ -19,9 +19,52 @@
 #endif
 namespace oma::gpu {
 namespace {
+std::atomic_bool recoveryRequested{false};
+std::atomic_int recoveryExitCode{0};
+QtMessageHandler previousMessageHandler = nullptr;
+
+void requestRecovery(const QString &reason) {
+    auto *app = QCoreApplication::instance();
+    if (!app || recoveryRequested.exchange(true)) return;
+    // Renderer diagnostics can arrive on a render thread while the GUI thread
+    // is waiting for it. Defer teardown until Qt has completed that frame.
+    QMetaObject::invokeMethod(app, [reason] {
+        const bool software = QQuickWindow::graphicsApi() == QSGRendererInterface::Software
+            || QQuickWindow::sceneGraphBackend() == QStringLiteral("software")
+            || qgetenv("OMA_GPU_UI") == "software";
+        const int code = software ? 1 : QuickSoftwareRestart;
+        recoveryExitCode.store(code);
+        qWarning().noquote() << "Qt interface renderer failed:" << reason
+                            << (software ? "Exiting." : "Restarting with CPU processing and software rendering.");
+        QCoreApplication::exit(code);
+    }, Qt::QueuedConnection);
+}
+
+void rendererMessage(QtMsgType type, const QMessageLogContext &context, const QString &message) {
+    // Qt 6's render loops log swapchain failures without emitting
+    // sceneGraphError (that signal covers context initialisation only).
+    if ((type == QtWarningMsg || type == QtCriticalMsg)
+        && (message == QStringLiteral("Failed to build or resize swapchain")
+            || message == QStringLiteral("Failed to create new swapchain")))
+        requestRecovery(message);
+    if (previousMessageHandler) previousMessageHandler(type, context, message);
+    else {
+        const QByteArray formatted = qFormatLogMessage(type, context, message).toLocal8Bit();
+        std::fprintf(stderr, "%s\n", formatted.constData());
+    }
+}
+
 class WindowRecoveryFilter final : public QObject {
 public:
-    using QObject::QObject;
+    explicit WindowRecoveryFilter(QObject *parent) : QObject(parent) {
+        recoveryRequested.store(false); recoveryExitCode.store(0);
+        previousMessageHandler = qInstallMessageHandler(rendererMessage);
+    }
+    ~WindowRecoveryFilter() override {
+        const auto active = qInstallMessageHandler(previousMessageHandler);
+        // A consumer can install its own handler after selecting the backend.
+        if (active != rendererMessage) qInstallMessageHandler(active);
+    }
     bool eventFilter(QObject *object, QEvent *event) override {
         if (event->type() == QEvent::Show)
             if (auto *window = qobject_cast<QQuickWindow *>(object)) guardQuickWindow(window);
@@ -91,19 +134,16 @@ QString selectQuickBackend(QGuiApplication &app) {
 void guardQuickWindow(QQuickWindow *window) {
     if (!window || window->property("_omaGpuRecoveryGuarded").toBool()) return;
     window->setProperty("_omaGpuRecoveryGuarded", true);
-    auto requested = std::make_shared<std::atomic_bool>(false);
     QObject::connect(window, &QQuickWindow::sceneGraphError, window,
-        [requested](QQuickWindow::SceneGraphError, const QString &reason) {
-            if (requested->exchange(true)) return;
-            qWarning().noquote() << "Qt interface renderer failed:" << reason;
-            const bool software = QQuickWindow::sceneGraphBackend() == QStringLiteral("software") || qgetenv("OMA_GPU_UI") == "software";
-            QMetaObject::invokeMethod(qApp, [software] { QCoreApplication::exit(software ? 1 : QuickSoftwareRestart); }, Qt::QueuedConnection);
-        }, Qt::DirectConnection);
+        [](QQuickWindow::SceneGraphError, const QString &reason) { requestRecovery(reason); }, Qt::DirectConnection);
 }
+int quickRecoveryExitCode() { return recoveryExitCode.load(); }
 int restartQuickSoftware(int argc, char **argv) {
     Q_UNUSED(argc);
     qputenv("OMA_GPU_UI", "software");
     qputenv("QT_QUICK_BACKEND", "software");
+    qputenv("OMA_GPU", "cpu");
+    qputenv("OMA_GPU_RECOVERED", "1");
     qunsetenv("QSG_RHI_BACKEND");
 #ifdef Q_OS_UNIX
     execvp(argv[0], argv);

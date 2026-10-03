@@ -101,7 +101,7 @@ static int runApplication(int argc, char *argv[]) {
     // A verb that needs no catalog answers before one is opened.
     if (headless) if (const int code = Headless::early(parser); code >= 0) return code;
     // Interactive starts wait for OK before opening a catalog.
-    if (!headless && !qEnvironmentVariableIsSet("OMARAW_SKIP_LAUNCH")) {
+    if (!headless && !qEnvironmentVariableIsSet("OMARAW_SKIP_LAUNCH") && qgetenv("OMA_GPU_RECOVERED") != "1") {
         const int result = LaunchScreen::run();
         if (result != LaunchScreen::Continue) return result;
     }
@@ -272,11 +272,15 @@ static int runApplication(int argc, char *argv[]) {
     const QStringList args = parser.positionalArguments();
     if (!args.isEmpty()) backend.openFromCommandLine(args.first());
 
-    return app.exec();
+    if (qgetenv("OMA_GPU_RECOVERED") == "1")
+        backend.setStatus(QCoreApplication::translate("main", "Recovered from a graphics failure. Using CPU processing and software rendering for this session."));
+    const int recovery = oma::gpu::quickRecoveryExitCode();
+    return recovery ? recovery : app.exec();
 }
 
 int main(int argc, char *argv[]) {
     // Unwind the catalogue locks and worker services before a renderer restart.
-    const int result = runApplication(argc, argv);
+    int result = runApplication(argc, argv);
+    if (const int recovery = oma::gpu::quickRecoveryExitCode()) result = recovery;
     return result == oma::gpu::QuickSoftwareRestart ? oma::gpu::restartQuickSoftware(argc, argv) : result;
 }

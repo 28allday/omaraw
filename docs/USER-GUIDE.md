@@ -1303,6 +1303,11 @@ Edit ▸ Preferences… has four pages. Settings save as you change them; Close 
 - **Keyboard**: every shortcut, editable.
 - **Processing → Speed and quality**: **Faster fitted previews** (on by default) speeds up the fitted view and uses a smaller live preview while you drag a control. The normal fitted resolution and full zoomed detail return on release; exports keep full quality. **Process exports at full resolution** runs every adjustment at the source size and downsizes last, slower on large files. GPU processing can be switched off; every job has a CPU fallback.
 
+If GPU processing runs out of graphics resources, the affected processing path
+switches to CPU for the session; its adjustments still apply. If the interface
+also fails, OmaRAW releases the catalog and attempts to reopen with CPU
+processing and software rendering. The status message explains the recovery.
+
 ### Memory and cache
 
 **Automatic memory allocation** uses a quarter of detected RAM, up to 8 GiB. Turn it off to type or drag a custom **Memory budget**, from 1 GiB up to three quarters of system RAM (at most 64 GiB). This is a processing and reusable-image budget, not a hard limit on the entire process. Large images, non-tileable processing, graphics drivers and AI workers can need additional memory. Changes apply between engine jobs without restarting.
