@@ -50,12 +50,21 @@ Item {
         pendingGuide = null
         rulerX0 = -1; rulerY0 = -1; rulerX1 = -1; rulerY1 = -1
     }
+    function stopDrawing() {
+        cancelGesture(); guided = false; ruler = false; guides = []
+    }
+    function drawLevelLine() { stopDrawing(); ruler = true }
+    function drawPerspectiveGuides() { stopDrawing(); guided = true }
     onVisibleChanged: if (!visible) cancelGesture()
     Connections {
         target: engine
-        function onRenderedChanged() { root.guides = []; root.pendingGuide = null }
-        function onImageChanged() { root.cancelGesture(); root.guided = false; root.ruler = false; root.guides = [] }
-        function onCropModeChanged() { if (!engine.cropMode) { root.cancelGesture(); root.guided = false; root.ruler = false; root.guides = [] } }
+        // Viewport and quality refreshes preserve normalized guide coordinates.
+        // Discard them only when the photo or its geometry is replaced.
+        function onFullSizeChanged() { root.cancelGesture(); root.guides = [] }
+        function onEditStateReplaced() { root.stopDrawing() }
+        function onHistoryJumped() { root.stopDrawing() }
+        function onImageChanged() { root.stopDrawing() }
+        function onCropModeChanged() { if (!engine.cropMode) root.stopDrawing() }
     }
 
     function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)) }

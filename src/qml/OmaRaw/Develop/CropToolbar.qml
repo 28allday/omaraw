@@ -11,14 +11,22 @@ Rectangle {
     radius: Theme.rControl
     color: Theme.scrim
     readonly property real angle: {
-        for (const p of engine.params) if (p.op === "ashift" && p.field === "rotation") return p.value
+        for (const p of engine.params) if (p.op === "ashift" && p.field === "rotation") return p.enabled === false ? 0 : p.value
         return 0
     }
     readonly property var ratios: [[qsTr("Free"), 0, 0], [qsTr("Original"), 1, 0], ["1:1", 1, 1], ["5:4", 5, 4], ["4:3", 4, 3], ["3:2", 3, 2], ["16:9", 16, 9], ["7:5", 7, 5]]
     function correct(operation, policy) {
-        root.overlay.ruler = false
-        root.overlay.guided = false
+        root.overlay.stopDrawing()
         engine.correctGeometry(operation, policy === undefined ? -1 : policy)
+    }
+    Connections {
+        target: engine
+        function onGeometryCompleted(operation, ok) {
+            if (!engine.cropMode) return
+            if (ok) root.overlay.stopDrawing()
+            else if (operation === 1) root.overlay.drawLevelLine()
+            else if (operation >= 2 && operation <= 4) root.overlay.drawPerspectiveGuides()
+        }
     }
     EditCoalescer {
         id: rotationTimer
@@ -47,28 +55,31 @@ Rectangle {
                 onClicked: root.overlay.flipRatio()
             }
             SliderField {
+                id: rotationControl
                 objectName: "straightenControl"
-                width: Math.min(215, controls.width)
+                width: Math.min(320, controls.width)
                 label: qsTr("Straighten"); labelWidth: 66
-                from: -45; to: 45; origin: 0; decimals: 1; suffix: "°"
-                tip: qsTr("Adjusts rotation. Constrain crop trims empty corners when enabled.")
+                from: -10; to: 10; origin: 0; decimals: 2; suffix: "°"
+                fieldFrom: -45; fieldTo: 45; fieldStep: 0.05
+                stepSize: 0.05; fineStep: 0.01; resetOnDoubleClick: true
+                tip: qsTr("Drag for small rotation corrections; hold Shift for finer control. Click the angle to type any value from −45° to 45°. Double-click the track to reset.")
                 value: root.angle
-                onEdited: v => rotationTimer.push(v)
+                onEdited: v => { root.overlay.stopDrawing(); rotationTimer.push(v) }
                 onEditingFinished: v => rotationTimer.flush(v)
             }
-            IconButton {
+            ToolButton {
                 objectName: "straightenRuler"
-                iconName: "ruler"; text: qsTr("Straighten along a line")
-                tip: qsTr("Drag along an edge that should be horizontal or vertical.")
+                iconName: "ruler"; text: qsTr("Draw level line"); showLabel: true
+                tip: qsTr("Click here, then drag across the photo along a horizon or upright edge. Release to straighten.")
                 checked: root.overlay.ruler
-                onClicked: { root.overlay.guided = false; root.overlay.ruler = !root.overlay.ruler }
+                onClicked: root.overlay.ruler ? root.overlay.stopDrawing() : root.overlay.drawLevelLine()
             }
             ComboField {
                 width: 100
                 readonly property var grids: [["thirds", qsTr("Thirds")], ["golden", qsTr("Golden")], ["diagonals", qsTr("Diagonals")], ["none", qsTr("No grid")]]
                 model: grids.map(g => g[1])
                 currentIndex: Math.max(0, grids.findIndex(g => g[0] === root.overlay.grid))
-                tipTitle: qsTr("Composition guide"); tip: qsTr("Draws a guide inside the crop frame.")
+                tipTitle: qsTr("Composition grid"); tip: qsTr("Shows a composition grid inside the crop frame.")
                 onActivated: i => root.overlay.grid = grids[i][0]
             }
             IconButton {
@@ -81,7 +92,10 @@ Rectangle {
                 objectName: "cropDone"
                 iconName: "check"; text: qsTr("Done"); showLabel: true
                 tip: qsTr("Keeps the changes and leaves Crop & straighten.")
-                onClicked: { rotationTimer.drop(); engine.cropMode = false }
+                onClicked: {
+                    if (rotationTimer.editing) rotationTimer.flush(rotationControl.shownValue)
+                    engine.cropMode = false
+                }
             }
         }
         Flow {
@@ -98,9 +112,9 @@ Rectangle {
             }
             ToolButton {
                 objectName: "guidedPerspectiveButton"
-                text: qsTr("Guided"); checkable: true; checked: root.overlay.guided
+                text: qsTr("Draw perspective guides"); checked: root.overlay.guided
                 tip: qsTr("Draw two edges that should be vertical or two that should be horizontal. Add another pair to correct both directions.")
-                onClicked: { root.overlay.ruler = false; root.overlay.guided = !root.overlay.guided; root.overlay.guides = [] }
+                onClicked: root.overlay.guided ? root.overlay.stopDrawing() : root.overlay.drawPerspectiveGuides()
             }
             ComboField {
                 objectName: "constrainCropControl"
@@ -122,7 +136,7 @@ Rectangle {
                 onClicked: engine.correctGeometry(5, -1, root.overlay.guides)
             }
             ToolButton { text: qsTr("Clear guides"); enabled: !engine.busy; onClicked: root.overlay.guides = [] }
-            ToolButton { text: qsTr("Cancel guides"); enabled: !engine.busy; onClicked: { root.overlay.guided = false; root.overlay.guides = [] } }
+            ToolButton { text: qsTr("Cancel guides"); enabled: !engine.busy; onClicked: root.overlay.stopDrawing() }
         }
         ToolButton {
             objectName: "advancedCropControls"
@@ -147,10 +161,13 @@ Rectangle {
             }
         }
         Text {
+            objectName: "cropDrawingHint"
             width: parent.width
             visible: text !== ""
-            text: root.overlay.guided ? qsTr("Draw two vertical edges or two horizontal edges. Use four guides for both directions.") + (engine.geometryStatus ? "\n" + engine.geometryStatus : "")
-                  : engine.geometryStatus
+            readonly property string drawingHint: root.overlay.ruler
+                ? qsTr("Drag along a horizon or an upright edge in the photo. Release to straighten. Click Draw level line again to cancel.")
+                : root.overlay.guided ? qsTr("Drag along two vertical edges or two horizontal edges in the photo, then click Apply guides. Use four guides for both directions.") : ""
+            text: [engine.geometryStatus, drawingHint].filter(s => s !== "").join("\n")
             textFormat: Text.PlainText; wrapMode: Text.WordWrap
             font.family: Theme.fontFamily; font.pixelSize: Theme.fsLabel; color: Theme.textSecondary
         }

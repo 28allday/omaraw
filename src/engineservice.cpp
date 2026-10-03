@@ -865,7 +865,7 @@ public slots:
         Q_UNUSED(imgid) Q_UNUSED(gen) Q_UNUSED(operation) Q_UNUSED(policy) Q_UNUSED(guides)
         error = QStringLiteral("no engine");
 #endif
-        emit geometryFinished(imgid, gen, ok, error);
+        emit geometryFinished(imgid, gen, operation, ok, error);
     }
     void exposureMeter(int imgid, int gen, int serial) {
         ExposureMeter::Result result;
@@ -2794,7 +2794,7 @@ signals:
     void jumpFailed(int imgid);
     void jumpRead(int imgid, int target);
     void rawClippingRead(int imgid, int gen, int serial, const QImage &image, const QString &status);
-    void geometryFinished(int imgid, int gen, bool ok, const QString &error);
+    void geometryFinished(int imgid, int gen, int operation, bool ok, const QString &error);
     void offlineStep(const QString &path, int index, int total, double part);
     void offlineDone(int done, int failed, bool cancelled, const QString &error);
     void detailRendered(int ticket, const QString &key, const QImage &image, const QString &error);
@@ -3086,15 +3086,20 @@ EngineService::EngineService(QObject *parent) : QObject(parent) {
         setBusy(m_pending > 0);
     });
     connect(m_worker, &EngineWorker::proofFailed, this, [this](const QString &e) { setStatus(tr("Soft proof: %1").arg(e)); });
-    connect(m_worker, &EngineWorker::geometryFinished, this, [this](int imgid, int gen, bool ok, const QString &error) {
+    connect(m_worker, &EngineWorker::geometryFinished, this, [this](int imgid, int gen, int operation, bool ok, const QString &error) {
         --m_pending;
         m_geometryBusy = false;
-        if (imgid == m_imgid && gen == m_generation.load()) {
+        const bool current = imgid == m_imgid && gen == m_generation.load();
+        if (current) {
             m_geometryStatus = ok ? tr("Correction applied. Undo restores the previous geometry.") : error;
-            if (ok) { m_dirty = true; refresh(); requestRender(); }
+            if (ok) { m_dirty = true; refresh(); }
+            // Geometry status and drawing instructions can resize the viewer.
+            // Catch up to its final bounds after analysis, including failure.
+            requestRender();
         }
         emit geometryChanged();
         setBusy(m_pending > 0);
+        if (current && (ok || !error.isEmpty())) emit geometryCompleted(operation, ok);
     });
     connect(m_worker, &EngineWorker::rendered, this, [this](int imgid, int gen, const QImage &img, const QImage &linear, const QImage &plain,
                                                             const QImage &encoded, const QImage &measured, int fullWidth, int fullHeight, int ms, int flags) {
@@ -4189,12 +4194,17 @@ void EngineService::setViewSize(int w, int h) {
     w = qMax(64, w); h = qMax(64, h);
     if (w == m_viewW && h == m_viewH) return;
     m_viewW = w; m_viewH = h;
+    // Changing toolbar height or window size must not invalidate an analysis
+    // in flight. Its completion renders using these updated bounds.
+    if (m_geometryBusy) return;
     // Match the overview to the fitted viewport, independent of zoom.
     // Compare both fitted dimensions so portrait images do not trigger a
     // render simply because they cannot fill a landscape viewport's width.
     QSize bounds(w, h);
     if (qMax(w, h) > 4096) bounds.scale(4096, 4096, Qt::KeepAspectRatio);
-    const QSize fitted = QSize(m_fullW, m_fullH).scaled(bounds, Qt::KeepAspectRatio);
+    QSize fitted(m_fullW, m_fullH);
+    if (fitted.width() > bounds.width() || fitted.height() > bounds.height())
+        fitted.scale(bounds, Qt::KeepAspectRatio);
     if (m_imgid >= 0 && (m_image.isNull() || m_image.width() < fitted.width() * 0.9 || m_image.height() < fitted.height() * 0.9))
         requestRender();
 }
@@ -4487,6 +4497,10 @@ QString EngineService::rivalToneMapper(const QString &op) const {
 
 void EngineService::setParam(const QString &op, const QString &field, double value) {
     if (m_imgid < 0) return;
+    if (op == QLatin1String("ashift") && !m_geometryStatus.isEmpty()) {
+        m_geometryStatus.clear();
+        emit geometryChanged();
+    }
     editBoundary(op + QLatin1Char('.') + field);
     // Native bloom still glows at strength 0. The UI's zero means bypass,
     // retaining its recipe so the effect switch can restore it later.

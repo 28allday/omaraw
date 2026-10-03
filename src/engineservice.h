@@ -664,6 +664,7 @@ signals:
     void parametricChanged();
     void cropChanged();
     void geometryChanged();
+    void geometryCompleted(int operation, bool ok);
     void cropModeChanged();
     void renderedChanged();
     void exported(const QString &path, bool ok);

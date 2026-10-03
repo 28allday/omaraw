@@ -991,7 +991,7 @@ images, use **Lens corrections** with a matching profile, or **Defringe**.
 
 ### Crop
 
-**Left**, **Top**, **Right**, **Bottom** as fractions of the frame. The crop tool (R) is the easier way: drag the handles or edges, pick a ratio, straighten with the slider or draw a line along something that should be level. Guides: thirds, golden, diagonals or none. Escape closes the tool.
+**Left**, **Top**, **Right**, **Bottom** as fractions of the frame. The crop tool (R) is the easier way: drag the handles or edges, pick a ratio, or straighten the photo. The **Straighten** slider covers −10° to 10° for small corrections. Hold Shift while dragging for finer control, or click the angle to type a value up to ±45°. Double-click the track to reset rotation. The composition grid offers thirds, golden, diagonals or none. Escape closes the tool.
 
 With a ratio locked, dragging an edge keeps the crop centred on the other
 axis. A corner responds to horizontal and vertical movement, and the ratio
@@ -1004,13 +1004,14 @@ swapping landscape and portrait fits the frame in one undoable step.
 
 Open **Crop and straighten** (R):
 
-- **Auto level** finds clear horizontal and vertical edges and levels the photo.
+- **Auto level** finds clear horizontal and vertical edges and levels the photo. If it cannot find reliable lines, the photo stays unchanged and **Draw level line** switches on automatically.
+- **Draw level line**: click the button, then drag along a horizon or an edge that should be horizontal or vertical. Release to straighten. Only one line is needed. Click the button again to cancel.
 - **Auto perspective** offers Vertical, Horizontal and Full. Use Vertical for leaning buildings; Full needs clear lines in both directions.
-- **Guided** lets you draw two edges that should be vertical or two that should be horizontal. Draw four guides to correct both directions, then choose **Apply guides**. Clear guides starts again; Cancel guides leaves the photo unchanged.
+- **Draw perspective guides**: click the button, then drag along two edges that should be vertical or two that should be horizontal. Draw four guides to correct both directions, then choose **Apply guides**. This mode also opens when Auto perspective cannot find a correction. Clear guides starts again; Cancel guides leaves the photo unchanged. Resizing the window preserves completed guides.
 - **Crop edges** trims the empty corners produced by rotation and perspective. Largest keeps the largest usable area; Original keeps the original aspect ratio. Off shows the full transformed frame. The policy also follows manual rotation and perspective changes.
 - **Reset geometry** resets rotation and perspective while preserving the crop frame and other adjustments. **Reset crop frame** restores the whole frame and Free aspect ratio while keeping geometry.
 
-Corrections appear in the preview and each is one undoable history step. An image without enough reliable lines stays unchanged; use the ruler or draw guides instead. These tools need the updated OmaRAW engine.
+Corrections appear in the preview and each is one undoable history step. Automatic correction needs clear straight edges; portraits and organic scenes may need **Draw level line** or manual rotation instead.
 
 ## Masks
 

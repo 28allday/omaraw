@@ -2875,6 +2875,10 @@ int oma_engine_geometry(int imgid, int operation, int crop_mode, const float *gu
         dt_dev_write_history(&g_dev);
     }
     g_free(params);
+    if (operation == 1 && (rc == 2 || rc == 3)) {
+        set_error("Auto level could not find reliable lines. The photo is unchanged; use Draw level line to straighten it.", NULL);
+        return -1;
+    }
     return rc ? geometry_error(rc) : 0;
 }
 static int geometry_param_set(int imgid, const char *field, float value) {
