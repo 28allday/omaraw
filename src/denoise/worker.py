@@ -335,6 +335,14 @@ class Inference:
             for _ in range(2):
                 start = time.monotonic(); self.run_with(self.cpu, sample); times.append(time.monotonic()-start)
             cpu_time = min(times)
+            # ORT's Linux hardware discovery misses Apple's platform GPU.
+            # This enables EP discovery; Dawn still chooses the Vulkan adapter.
+            if sys.platform == "linux" and os.uname().machine == "aarch64":
+                try:
+                    if b"apple," in Path("/proc/device-tree/compatible").read_bytes():
+                        os.environ.setdefault("ORT_WEBGPU_EP_ALLOW_SOFTWARE_ADAPTER", "1")
+                except OSError:
+                    pass
             import onnxruntime_ep_webgpu as gpu
             ort.register_execution_provider_library("webgpu", gpu.get_library_path())
             device = next(d for d in ort.get_ep_devices() if d.ep_name == gpu.get_ep_name())

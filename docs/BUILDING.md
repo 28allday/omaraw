@@ -48,6 +48,10 @@ ARM uses baseline ARMv8 instructions and 64 KiB ELF load alignment, compatible
 with Asahi's 16 KiB pages. The package validator checks all bundled ELF files,
 including the Python wheels. Native Mac testing still needs to cover the Asahi
 kernel, GPU drivers, AI acceleration and full-resolution RAW workloads.
+On Asahi, the AI workers enable WebGPU discovery through ORT's CPU device entry
+because its Linux hardware enumeration misses Apple's platform GPU. Dawn still
+selects the Vulkan adapter; denoise retains its normal CPU comparison and fallback.
+This setting is limited to Linux ARM64 machines with an Apple device tree.
 
 The **Package candidates** GitHub Actions workflow builds both architectures
 on separate native hosted runners using signed Arch root filesystems. It runs
@@ -61,6 +65,8 @@ with networking disabled. Hosted runners do not qualify Apple GPU behavior.
 The x86 complete-source filename stays unchanged. The ARM complete-source bundle
 adds `-aarch64` before `.src.tar.gz`, so both can be attached to one release.
 Combine the two verified checksum manifests when preparing that release.
+The workflow explicitly selects `.pkg.tar.zst` binaries and `.src.tar.gz` sources,
+so Arch Linux ARM's different default compression cannot change asset names.
 The installer selects the matching architecture; a release without that asset
 fails without installing a different architecture's package.
 

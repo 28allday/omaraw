@@ -177,6 +177,15 @@ class Inference:
         self.manifest = json.loads(Path(__file__).with_name("models.json").read_text())
         if backend == "vulkan":
             try:
+                # ORT enumerates PCI GPUs on Linux and misses Apple's platform
+                # GPU. Advertise an EP entry through the CPU device on Asahi;
+                # Dawn still selects the actual Vulkan adapter for inference.
+                if sys.platform == "linux" and os.uname().machine == "aarch64":
+                    try:
+                        if b"apple," in Path("/proc/device-tree/compatible").read_bytes():
+                            os.environ.setdefault("ORT_WEBGPU_EP_ALLOW_SOFTWARE_ADAPTER", "1")
+                    except OSError:
+                        pass
                 import onnxruntime_ep_webgpu as gpu
                 ort.register_execution_provider_library("webgpu", gpu.get_library_path())
                 self.device = next(d for d in ort.get_ep_devices() if d.ep_name == gpu.get_ep_name())

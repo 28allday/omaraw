@@ -80,6 +80,7 @@ sudo cp "$work/source.bundle" "$rootfs/work/source.bundle"
   test "$(git rev-parse HEAD)" = "$1"
   test -z "$(git status --porcelain)"
   export OMARAW_BUILD_JOBS=2 OMP_NUM_THREADS=2 OMP_THREAD_LIMIT=2 SOURCE_DATE_EPOCH="$2"
+  export PKGEXT=.pkg.tar.zst SRCEXT=.src.tar.gz
   ./bin/package --syncdeps --noconfirm
 ' bash "$revision" "$epoch"
 "${nspawn[@]}" /bin/bash -euc '
