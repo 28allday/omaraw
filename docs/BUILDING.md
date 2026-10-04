@@ -29,12 +29,13 @@ submodule archives. Extract it, enter its `omaraw` directory and run
 `makepkg --syncdeps` to rebuild. Normal system build dependencies are required;
 no sibling application or private development checkout is needed.
 
-## ARM64 and Omarchy Mac candidates
+## ARM64 and Omarchy Mac
 
 The same recipe supports native `x86_64` and `aarch64` builds. The ARM target is
 Arch Linux ARM, including Omarchy Mac on Asahi Alarm for M1/M2. Build inside a
 matching Arch userspace; an Ubuntu ARM runner alone is not that environment.
-ARM packages remain candidates until tested on an actual supported Mac.
+Beta 7 includes both architectures. ARM package and hardware checks were run on
+an M2 Mac with Asahi's 16 KiB pages; future changes still need hardware testing.
 
 `pkgbuild/ai-sources.json` retains the x86 dependency lock and shared models.
 `pkgbuild/ai-sources-aarch64.json` replaces only architecture-specific wheels
@@ -46,8 +47,9 @@ signature was checked against key `68B3537F39A313B3E574D06777193F152BDBE6A6`.
 
 ARM uses baseline ARMv8 instructions and 64 KiB ELF load alignment, compatible
 with Asahi's 16 KiB pages. The package validator checks all bundled ELF files,
-including the Python wheels. Native Mac testing still needs to cover the Asahi
-kernel, GPU drivers, AI acceleration and full-resolution RAW workloads.
+including the Python wheels. Native Mac testing covers the Asahi kernel, GPU
+drivers, AI acceleration and full-resolution RAW workloads. Texture-heavy
+exports remain a separate performance limitation on both architectures.
 On Asahi, the AI workers enable WebGPU discovery through ORT's CPU device entry
 because its Linux hardware enumeration misses Apple's platform GPU. Dawn still
 selects the Vulkan adapter; denoise retains its normal CPU comparison and fallback.
@@ -55,7 +57,7 @@ This setting is limited to Linux ARM64 machines with an Apple device tree.
 
 The **Package candidates** GitHub Actions workflow builds both architectures
 on separate native hosted runners using signed Arch root filesystems. It runs
-on the `arm64-support` branch and can be dispatched manually. Its repository
+on `master` and the `arm64-support` staging branch, and can be dispatched manually. Its repository
 permissions are read-only: it uploads candidate artifacts and logs, and cannot
 replace release assets or publish a release. Check both jobs before promoting
 a candidate. Validation includes fully decoded exports in all seven formats,

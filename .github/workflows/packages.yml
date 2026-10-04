@@ -2,7 +2,7 @@ name: Package candidates
 
 on:
   push:
-    branches: [arm64-support]
+    branches: [master, arm64-support]
   workflow_dispatch:
 
 permissions:

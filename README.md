@@ -7,7 +7,7 @@ separately, so you can always return to the starting image.
 
 ![Developing a photograph in OmaRAW](docs/screenshots/develop.png)
 
-**First beta · Linux x86_64.** Start with a small collection and keep backups
+**Beta 7 · Linux x86_64 and ARM64.** Start with a small collection and keep backups
 of your photographs and catalog. Camera support and tethering depend on the
 camera; GPU acceleration depends on its driver.
 
@@ -33,8 +33,9 @@ The installer downloads the beta, checks its checksum and installs its
 requirements. It also installs the agent skill described below. You do not need
 to compile the app or install its processing engine separately.
 
-For a private repository, use the manual download below while signed in to
-GitHub. Browser sign-in does not authenticate the terminal installer.
+The installer selects `x86_64` or `aarch64` automatically. ARM packages target
+Arch Linux ARM, including Omarchy Mac on Asahi Linux; they are not macOS apps.
+On an Asahi Mac, install `vulkan-asahi` for GPU acceleration if it is missing.
 
 For manual installation, download the package and `SHA256SUMS` from Releases
 into the same folder. Open a terminal in that folder, verify the download,
@@ -42,13 +43,18 @@ then install:
 
 ```sh
 sha256sum --check --ignore-missing SHA256SUMS
-sudo pacman -U ./omaraw-0.1.0beta6-1-x86_64.pkg.tar.zst
+sudo pacman -U ./omaraw-0.1.0beta7-1-x86_64.pkg.tar.zst
 ```
 
+For ARM, use `omaraw-0.1.0beta7-1-aarch64.pkg.tar.zst` instead.
 Continue only if the package checksum reports **OK**.
 
 Packages are currently unsigned. Use the files from this repository's Releases
-page. Other distributions and ARM do not have a supported package yet.
+page. Other distributions do not have a supported package yet.
+
+Texture processing during exports can be slow on both architectures. AI RAW
+denoise works on the tested M2 Mac but can also take time. Performance work is
+tracked separately from this release.
 
 ## Getting started
 
