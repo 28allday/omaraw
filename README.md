@@ -42,7 +42,7 @@ then install:
 
 ```sh
 sha256sum --check --ignore-missing SHA256SUMS
-sudo pacman -U ./omaraw-0.1.0beta4-1-x86_64.pkg.tar.zst
+sudo pacman -U ./omaraw-0.1.0beta5-1-x86_64.pkg.tar.zst
 ```
 
 Continue only if the package checksum reports **OK**.

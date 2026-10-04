@@ -853,6 +853,7 @@ private:
     bool m_previewParamsDeferred = false;
     QHash<QString, QImage> m_retainedDetailImages;
     QVariantList m_retainedDetailTiles[2];
+    int m_retainedDetailRevision = -1;
     void retainVisibleDetails();
     void clearRetainedDetails();
     void releaseRetainedDetailsIfReady();

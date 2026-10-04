@@ -1078,7 +1078,7 @@ void oma_engine_set_memory_budget(size_t working, size_t sources, size_t context
     // five contexts that are rarely all in use. A complete native area can
     // then serve many tiles without repeatedly re-rendering the same pixels.
     g_context_budget = MAX((size_t)1 << 20, contexts);
-    g_pipe_budget = MIN(256u * 1024u * 1024u, g_context_budget);
+    g_pipe_budget = g_context_budget;
     g_area_budget = g_context_budget;
     g_overview_budget = overviews;
     if (!g_getenv("OMARAW_ENGINE_RESOURCES")) {
@@ -1343,9 +1343,11 @@ static oma_preview_cache *prepare_preview(int imgid, int original, int uncropped
         set_error(reduced ? "no reduced preview source" : "cannot load preview source", NULL); return NULL;
     }
     // Nine native tiles need more intermediate slots than a fitted view.
-    // Storage remains lazy and the retained byte budget below is unchanged.
+    // Storage remains lazy. OmaRAW trims these contexts against its shared
+    // budget after each render; the engine's independent 1/64-working-memory
+    // trim otherwise throws those same intermediates away before each edit.
     const gboolean allocated = g_reusable_preview
-        ? dt_dev_pixelpipe_init_cached(&cache->pipe, 0, g_strcmp0(g_getenv("OMARAW_DETAIL_REUSE"), "0") ? 64 : 16, 64)
+        ? dt_dev_pixelpipe_init_cached(&cache->pipe, 0, g_strcmp0(g_getenv("OMARAW_DETAIL_REUSE"), "0") ? 64 : 16, 0)
         : dt_dev_pixelpipe_init_export(&cache->pipe, 512, 512, IMAGEIO_RGB | IMAGEIO_FLOAT, FALSE);
     if (!allocated) {
         dt_mipmap_cache_release(&input); dt_dev_cleanup(&cache->dev);
@@ -1500,8 +1502,9 @@ static int render_region_direct(oma_preview_cache *cache, int x, int y, int widt
     g_preview_stats.peak_bytes = MAX(g_preview_stats.peak_bytes, MAX(pipe->cache.allmem, pipe->cache.max_allmem));
     trim_sources(imgid);
     // The export backbuf aliases a cache line; the caller now owns a copy.
-    // Drop the largest buffers first, preserving useful reduced-size stages
-    // and the module graph even for sources with large demosaic intermediates.
+    // Share the configured context budget with other previews. A fixed
+    // 256 MiB per-pipe cap discarded the native demosaic/denoise results
+    // after every edit, even with gigabytes available in this budget.
     if (!result && cache->reusable) {
         trim_preview_pipe(cache, g_pipe_budget);
     }

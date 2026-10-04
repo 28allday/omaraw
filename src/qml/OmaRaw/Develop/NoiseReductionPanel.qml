@@ -2,20 +2,10 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import OmaRaw.Ui
 
-// Noise reduction, in one place. It drives the engine's profiled denoise,
-// which knows the noise this camera makes at this ISO, in one of two ways:
-//
-//   Everything        non-local means, automatic: the cleanest result the
-//                     engine has, brightness grain and colour blotches alike.
-//   Colour only       wavelets, automatic, with the brightness curve at zero:
-//                     the colour blotches go and the grain stays, for anyone
-//                     who likes the grain (darktable's "chroma only" recipe).
-//
-// Amount 50 is what the profile calls for (strength 1 in Everything, curve
-// 0.5 in Colour only, whose threshold goes as 4·y²); 0 is nothing, 100 twice
-// as strong, past which skin turns waxy. Keep fine detail raises the weight
-// of the centre pixel in the patch comparison (0.1 → 3), measured on an
-// LX100 at ISO 2500 to bring texture back without the grain.
+// Everything uses automatic non-local means. Colour only uses automatic
+// Y0U0V0 wavelets with zero luminance thresholds. Amount 50 maps to strength
+// 1 or a chroma curve of 0.5 respectively; the latter's threshold is 4*y*y.
+// Keep fine detail raises the central pixel weight from 0.1 to 3.
 Column {
     id: root
     property bool embedded: false
@@ -25,7 +15,8 @@ Column {
     readonly property string op: "denoiseprofile"
     readonly property var rows: (engine.paramsVersion, engine.paramsFor(root.op))
     readonly property bool found: rows.length > 0
-    readonly property bool moduleOn: found && rows[0].enabled === true
+    readonly property bool storedOn: found && rows[0].enabled === true
+    readonly property bool moduleOn: requested ? requested.on : storedOn
     readonly property var hotRows: (engine.paramsVersion, engine.paramsFor("hotpixels"))
     readonly property bool hotOn: hotRows.length > 0 && hotRows[0].enabled === true
     function value(field, fallback) { const p = root.rows.find(p => p.field === field); return p && p.value !== undefined ? p.value : fallback }
@@ -35,12 +26,29 @@ Column {
                                           && [0, 1, 2, 3, 4, 5, 6].every(b => band(4, b) < 0.005)
     // Set up some other way (an older edit, a preset from elsewhere): the
     // controls show the nearest reading, and moving one replaces it.
-    readonly property bool other: moduleOn && mode !== 3 && !colourOnlyNow
+    readonly property bool other: !requested && moduleOn && mode !== 3 && !colourOnlyNow
     // 0 everything, 1 colour only
-    readonly property int what: colourOnlyNow ? 1 : 0
-    readonly property real amount: what === 1 ? [0, 1, 2, 3, 4, 5, 6].reduce((s, b) => s + band(5, b), 0) / 7 * 100
+    readonly property int storedWhat: colourOnlyNow ? 1 : 0
+    readonly property real storedAmount: storedWhat === 1 ? [0, 1, 2, 3, 4, 5, 6].reduce((s, b) => s + band(5, b), 0) / 7 * 100
                                               : Math.min(100, value("strength", 1) * 50)
-    readonly property real keepDetail: Math.max(0, Math.min(100, (value("central_pixel_weight", 0.1) - 0.1) / 2.9 * 100))
+    readonly property real storedDetail: Math.max(0, Math.min(100, (value("central_pixel_weight", 0.1) - 0.1) / 2.9 * 100))
+    readonly property int what: requested ? requested.what : storedWhat
+    readonly property real amount: requested ? requested.amount : storedAmount
+    readonly property real keepDetail: requested ? requested.keep : storedDetail
+    // A mode click and the next slider edit can precede engine read-back.
+    // Compose edits from the latest request until the worker has caught up.
+    property var requested: null
+    function settle() {
+        if (!engine.busy && !amountControl.editing && !detailControl.editing) requested = null
+    }
+    Connections {
+        target: engine
+        function onBusyChanged() { root.settle() }
+        function onParamsChanged() { root.settle() }
+        function onEditStateReplaced() { root.discard() }
+        function onHistoryJumped() { root.discard() }
+        function onImageChanged() { root.discard() }
+    }
 
     function valuesFor(what, amount, keep) {
         const v = (field, value) => ({op: root.op, field: field, value: value})
@@ -52,10 +60,32 @@ Column {
         return [v("mode", 3), v("strength", Math.max(0.001, amount / 50)), v("overshooting", 1), v("central_pixel_weight", 0.1 + keep / 100 * 2.9)]
     }
     function send(what, amount, keep) {
-        if (amount <= 0) { if (root.moduleOn) engine.setModuleEnabled(root.op, false); return }
+        if (amount <= 0) {
+            if (root.moduleOn) {
+                requested = {on: false, what: what, amount: root.amount, keep: keep}
+                engine.setModuleEnabled(root.op, false)
+            }
+            return
+        }
+        requested = {on: true, what: what, amount: amount, keep: keep}
         engine.applyValues(root.valuesFor(what, amount, keep))
     }
+    function choose(what) {
+        const amount = root.amount, keep = root.keepDetail
+        amountControl.cancel(); detailControl.cancel()
+        root.send(what, amount === 0 ? 50 : amount, keep)
+    }
+    function toggle() {
+        const what = root.what, amount = root.moduleOn ? 0 : root.amount, keep = root.keepDetail
+        amountControl.cancel(); detailControl.cancel()
+        root.send(what, amount, keep)
+    }
+    function discard() {
+        amountControl.cancel(); detailControl.cancel()
+        requested = null
+    }
     function reset() {
+        discard()
         engine.resetTool("denoiseprofile")
     }
     spacing: Theme.s1
@@ -66,9 +96,10 @@ Column {
         visible: !root.embedded
         height: visible ? Theme.hRow + Theme.s1 : 0
         text: qsTr("Noise reduction")
-        tip: qsTr("Cleans up the grain and coloured blotches of high ISO and lifted shadows, using noise measured for this camera at this ISO. Judge it at 100%.")
+        tip: qsTr("Cleans up grain and coloured blotches, using a camera and ISO noise profile when available. Judge it at 100%.")
         operation: root.op; on: root.moduleOn; saveEnabled: root.saveEnabled
-        onEyeClicked: if (root.moduleOn) engine.setModuleEnabled(root.op, false); else root.send(root.what, root.amount, root.keepDetail)
+        resetAction: () => root.reset()
+        onEyeClicked: root.toggle()
         onSavePresetRequested: (operation, label) => root.savePresetRequested(operation, label)
         IconButton {
             objectName: "resetNoiseReduction"
@@ -85,10 +116,10 @@ Column {
             anchors.left: parent.left; anchors.leftMargin: Theme.s3
             anchors.verticalCenter: parent.verticalCenter
             labels: [qsTr("Everything"), qsTr("Colour only")]
-            tips: [qsTr("Cleans grain and colour blotches together: the cleanest result."),
+            tips: [qsTr("Reduces brightness grain and colour blotches. Lower Keep fine detail for more grain smoothing."),
                    qsTr("Takes out the colour blotches and keeps the grain, for a filmic look.")]
             currentIndex: root.what
-            onActivated: i => root.send(i, root.amount === 0 ? 50 : root.amount, root.keepDetail)
+            onActivated: i => root.choose(i)
         }
     }
     Text {
@@ -105,6 +136,8 @@ Column {
         property string tip: ""
         property real value: 0
         property real origin: 0
+        readonly property bool editing: throttle.editing
+        function cancel() { field.discardEdit(); throttle.drop() }
         signal moved(real v)
         objectName: "noiseSlider_" + key
         width: parent ? parent.width : 0
@@ -125,17 +158,19 @@ Column {
         }
     }
     NoiseSlider {
+        id: amountControl
         key: "amount"; value: root.amount
         label: qsTr("Amount")
-        tip: root.what === 1 ? qsTr("How much of the colour blotching to take out. 50 is what this camera needs at this ISO.")
-                             : qsTr("How much noise to take out. 50 is what this camera needs at this ISO; much past 70 and skin starts to look waxy.")
+        tip: root.what === 1 ? qsTr("How much colour blotching to remove. Start at 50 and judge at 100% zoom; lower values preserve more colour detail.")
+                             : qsTr("How much grain and colour noise to remove. Start at 50 and judge at 100% zoom; higher values can soften texture.")
         onMoved: v => root.send(root.what, v, root.keepDetail)
     }
     NoiseSlider {
+        id: detailControl
         key: "detail"; value: root.keepDetail; origin: 0
         visible: root.what === 0
         label: qsTr("Keep fine detail")
-        tip: qsTr("Brings back texture — skin, hair, fabric — that the smoothing took, at the cost of a little grain.")
+        tip: qsTr("Preserves texture such as skin, hair and fabric by reducing grain smoothing. Start at 0 to judge noise removal, then raise it as needed. High values can leave Everything looking similar to Colour only.")
         onMoved: v => root.send(0, root.amount, v)
     }
     CheckField {

@@ -124,8 +124,12 @@ inline std::string textureBlur(int step, bool horizontal) {
             + "," + std::to_string(horizontal ? 0 : k*step) + "),ivec2(0),sz-1),0).rgb;\n";
     return body + "color=vec4(max(sum,vec3(0)),1);";
 }
-inline std::string textureSolve(float amount, float zoom, float radius, int step) {
+inline std::array<float, 4> textureSpeeds(float amount, float zoom, float radius) {
     const float real = radius * zoom, norm = std::exp(-(real*real)/(170.f*170.f)), k = amount/100.f;
+    return {(-.15f*k)*.25f*norm, (.05f*k)*.25f*norm,
+            (.05f*k)*.25f*norm, (-.15f*k)*.25f*norm};
+}
+inline std::string textureSolve(int step) {
     // Two isotropic and two isophote kernels. The exponent uses the same
     // float-to-integer approximation as the CPU engine, not GLSL exp().
     std::string body = R"(
@@ -158,8 +162,8 @@ for(int n=0;n<9;++n) {
 }
 )";
     const auto marker = body.find("STEP"); body.replace(marker, 4, std::to_string(step));
-    body += "precise vec3 acc=vec3(0); acc+=d0*"+decimal((-.15f*k)*.25f*norm)+"; acc+=d1*"+decimal((.05f*k)*.25f*norm)
-        +"; acc+=d2*"+decimal((.05f*k)*.25f*norm)+"; acc+=d3*"+decimal((-.15f*k)*.25f*norm)+";\n";
-    return body + "precise vec3 result=(hf[4]+acc/(vec3(1)+variance*"+decimal(99.f*(radius*radius)/9.f)+"))+lf[4]; color=vec4(max(result,vec3(0)),1);";
+    body += "precise vec3 acc=vec3(0); acc+=d0*oma_texture_speeds.x; acc+=d1*oma_texture_speeds.y;"
+            " acc+=d2*oma_texture_speeds.z; acc+=d3*oma_texture_speeds.w;\n";
+    return body + "precise vec3 result=(hf[4]+acc/(vec3(1)+variance*oma_texture_regularization))+lf[4]; color=vec4(max(result,vec3(0)),1);";
 }
 }

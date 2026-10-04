@@ -3951,6 +3951,7 @@ void EngineService::retainVisibleDetails() {
             cost += bytes;
         }
         m_detailCache.setMaxCost(m_detailBudgetKiB - cost);
+        m_retainedDetailRevision = m_generation.load();
     }
 }
 void EngineService::invalidateDetails(bool preserve) {
@@ -4109,7 +4110,12 @@ QVariantList EngineService::detailTilesFor(int index) const {
 }
 QVariantList EngineService::plainDetailTilesFor(int index) const {
     if (index == 0 && previewEditing()) return {};
-    if (!m_retainedDetailTiles[index].isEmpty()) return m_retainedDetailTiles[index];
+    // Pans retain sharp tiles from the same edit. After an edit's overview
+    // arrives, old tiles must not cover it while expensive native detail
+    // (Texture, denoise, masks) catches up. Before/comparison stays stable.
+    if (!m_retainedDetailTiles[index].isEmpty()
+        && (index || m_retainedDetailRevision == m_generation.load()
+            || m_renderedGeneration != m_generation.load())) return m_retainedDetailTiles[index];
     QVariantList tiles;
     const auto &layer = m_detailLayers[index];
     if (layer.width <= 0 || layer.height <= 0) return tiles;

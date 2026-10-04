@@ -861,12 +861,12 @@ override box; otherwise leave it blank. You can cancel during processing.
 
 ### Noise reduction
 
-The existing Noise reduction tool adjusts the current develop recipe. It knows the noise your camera makes at the ISO you shot at (for the hundreds of cameras the engine has measured), so the starting point is already matched to the photo. Turn it on with its status dot, or just move a slider. A denoised DNG usually needs little or none of this additional smoothing.
+The standard Noise reduction tool adjusts the current develop recipe. For supported cameras it uses noise measurements matched to the capture ISO; otherwise it uses a generic profile, so the same amount may have a different effect. Turn it on with its status dot, or just move a slider. A denoised DNG usually needs little or none of this additional smoothing.
 
-- **Everything** cleans the fine grain and the coloured blotches together. It compares small patches across the picture and averages the ones that match, the cleanest method the engine has.
+- **Everything** reduces brightness grain and coloured blotches together. It compares small patches across the picture and averages the ones that match.
 - **Colour only** takes out the coloured blotches and leaves the grain, for a filmic look.
-- **Amount**: rests at zero while noise reduction is off. Zero or a slider reset switches it off without discarding the saved amount. When enabled, 50 is what the camera needs at this ISO. Lower leaves more noise; much past 70 and skin starts to look waxy.
-- **Keep fine detail** (Everything only): brings back texture such as skin, hair and fabric that the smoothing took, at the cost of a little grain. Around 30 is a good start on portraits.
+- **Amount**: rests at zero while noise reduction is off. Zero or a slider reset switches it off without discarding the saved amount. Start at 50, then adjust at 100% zoom. Lower values leave more noise; higher values can soften texture. The two modes use different methods, so equal amounts do not promise identical colour smoothing.
+- **Keep fine detail** (Everything only): preserves texture such as skin, hair and fabric by reducing grain smoothing. Start at 0 to assess noise removal, then raise it as needed. High values leave more grain and can make Everything look similar to Colour only.
 - **Remove hot pixels**: replaces single bright pixels stuck on, common in long exposures.
 
 Judge it at 100%: the fitted view hides both the noise and the smoothing.

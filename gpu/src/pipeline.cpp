@@ -446,7 +446,17 @@ struct Context::State {
                     for (int s = int(n)-1; s >= 0; --s) {
                         if (cancelled(cancel)) return {};
                         const pl_tex next = s == 0 ? result : low == a ? b : a;
-                        pass(low, next, detail::textureSolve(op.textureAmount, op.textureScale, radii[s], 1 << s), nullptr, texturePool[s]);
+                        // Slider values are data, not shader source. Baking
+                        // them in compiled another diffusion kernel at every
+                        // scale for each amount and preview resolution.
+                        const auto speeds = detail::textureSpeeds(op.textureAmount, op.textureScale, radii[s]);
+                        const float regularization = 99.f * (radii[s]*radii[s]) / 9.f;
+                        std::vector<pl_shader_var> variables(2);
+                        variables[0].var = pl_var_vec4("oma_texture_speeds");
+                        variables[0].data = speeds.data(); variables[0].dynamic = true;
+                        variables[1].var = pl_var_float("oma_texture_regularization");
+                        variables[1].data = &regularization; variables[1].dynamic = true;
+                        pass(low, next, detail::textureSolve(1 << s), nullptr, texturePool[s], nullptr, &variables);
                         low = next;
                     }
                     working = result;

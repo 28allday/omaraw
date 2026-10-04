@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Download a beta/release package, verify its checksum, then use pacman.
 set -euo pipefail
-version=0.1.0-beta.4
+version=0.1.0-beta.5
 download_dir=
 usage() {
   printf '%s\n' 'Usage: bash install.sh [--version VERSION] [--download-only DIRECTORY]' \
