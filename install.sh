@@ -5,7 +5,7 @@ version=0.1.0-beta.6
 download_dir=
 usage() {
   printf '%s\n' 'Usage: bash install.sh [--version VERSION] [--download-only DIRECTORY]' \
-    'Installs the Arch/Omarchy x86_64 package from the official GitHub release.'
+    'Installs the matching Arch/Omarchy x86_64 or aarch64 package from a GitHub release.'
 }
 while (($#)); do
   case "$1" in
@@ -20,8 +20,9 @@ done
 [[ $version =~ ^[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta|rc)\.[0-9]+)?$ ]] || {
   printf 'Invalid release version: %s\n' "$version" >&2; exit 2;
 }
-[[ $(uname -s) == Linux && $(uname -m) == x86_64 ]] || {
-  printf '%s\n' 'This package supports Linux x86_64 only. See the build instructions for other platforms.' >&2; exit 1;
+architecture=$(uname -m)
+[[ $(uname -s) == Linux && ( $architecture == x86_64 || $architecture == aarch64 ) ]] || {
+  printf '%s\n' 'Packages support Linux x86_64 and aarch64. See the build instructions for other platforms.' >&2; exit 1;
 }
 for tool in curl sha256sum awk mktemp; do
   command -v "$tool" >/dev/null || { printf 'Required command missing: %s\n' "$tool" >&2; exit 1; }
@@ -33,7 +34,7 @@ fi
 package_version=${version/-alpha./alpha}
 package_version=${package_version/-beta./beta}
 package_version=${package_version/-rc./rc}
-package="omaraw-${package_version}-1-x86_64.pkg.tar.zst"
+package="omaraw-${package_version}-1-${architecture}.pkg.tar.zst"
 url="https://github.com/28allday/omaraw/releases/download/v${version}"
 temporary=$(mktemp -d -t omaraw-install.XXXXXXXX)
 trap 'rm -rf -- "$temporary"' EXIT
@@ -42,7 +43,8 @@ download() {
 }
 printf 'Downloading OmaRAW %s…\n' "$version"
 if ! download SHA256SUMS || ! download "$package"; then
-  printf '%s\n' 'Download failed. Check your connection and that this release is available:' \
+  printf 'Download failed. Check your connection and that release %s provides a %s package:\n' "$version" "$architecture" >&2
+  printf '%s\n' \
     'https://github.com/28allday/omaraw/releases' >&2
   exit 1
 fi

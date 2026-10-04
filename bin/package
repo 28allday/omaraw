@@ -26,6 +26,16 @@ mapfile -t BUILT < <(makepkg --packagelist)
 shopt -s nullglob
 SOURCES=("omaraw-$VERSION".src.tar*)
 shopt -u nullglob
+# Each architecture has different pinned interpreter/wheel inputs. Give the
+# ARM source bundle its own release asset name; retain the existing x86 name.
+if [[ $(uname -m) == aarch64 ]]; then
+  for index in "${!SOURCES[@]}"; do
+    file=${SOURCES[$index]}
+    target=${file/.src.tar/-aarch64.src.tar}
+    mv -- "$file" "$target"
+    SOURCES[$index]=$target
+  done
+fi
 ARTEFACTS=()
 for file in "${BUILT[@]}" "${SOURCES[@]}"; do
   if [[ $(dirname -- "$file") == "$PWD" ]]; then ARTEFACTS+=("$(basename -- "$file")"); else ARTEFACTS+=("$file"); fi

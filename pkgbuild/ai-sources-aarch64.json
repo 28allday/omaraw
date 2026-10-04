@@ -1,0 +1,68 @@
+{
+  "python": "3.14",
+  "replacements": [
+    {
+      "replaces": "ml_dtypes-0.6.0-cp314-cp314-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl",
+      "name": "ml_dtypes-0.6.0-cp314-cp314-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl",
+      "url": "https://files.pythonhosted.org/packages/db/48/77f0ede10558d0d935da2e3276ed7e9c8cc2bad3463b9a0b66b03fc60be2/ml_dtypes-0.6.0-cp314-cp314-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl",
+      "sha256": "317be9967fb84b0ce4e80e6b1bf71213d21971621cf6f1e501a63602a95297bf",
+      "bytes": 360334
+    },
+    {
+      "replaces": "numpy-2.5.3-cp314-cp314-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl",
+      "name": "numpy-2.5.3-cp314-cp314-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl",
+      "url": "https://files.pythonhosted.org/packages/9c/72/12918652e7912ef9751e8694c88820fcd1908e0618cb23f5f3caa6004b7b/numpy-2.5.3-cp314-cp314-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl",
+      "sha256": "be5a8381859b6da607c84f4f7d6847725f1cf1853ef8a2c9e115b7d58bef47dc",
+      "bytes": 15703377
+    },
+    {
+      "replaces": "onnx-1.23.0-cp312-abi3-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl",
+      "name": "onnx-1.23.0-cp312-abi3-manylinux_2_26_aarch64.manylinux_2_28_aarch64.whl",
+      "url": "https://files.pythonhosted.org/packages/c6/ff/a7d3fe41debd5b8947182a632b4e001bd3a7a103212e58ef6ca0c3daab91/onnx-1.23.0-cp312-abi3-manylinux_2_26_aarch64.manylinux_2_28_aarch64.whl",
+      "sha256": "95b77466b4f6bc7c2c63d6004b8db7d963fb17bf24aff13007752e9d2ebf9390",
+      "bytes": 8640232
+    },
+    {
+      "replaces": "onnxruntime-1.30.0-cp314-cp314-manylinux_2_28_x86_64.whl",
+      "name": "onnxruntime-1.30.0-cp314-cp314-manylinux_2_28_aarch64.whl",
+      "url": "https://files.pythonhosted.org/packages/c6/bc/1069e58b24779ba9d2fd479db5ecb3a15a6f49b585107c898819c0789558/onnxruntime-1.30.0-cp314-cp314-manylinux_2_28_aarch64.whl",
+      "sha256": "d2184fddb6798136e7c478244391ca82443f5c757f59f15bb9e5ad2da5e03175",
+      "bytes": 21346830
+    },
+    {
+      "replaces": "onnxruntime_ep_webgpu-0.4.0-py3-none-manylinux_2_28_x86_64.whl",
+      "name": "onnxruntime_ep_webgpu-0.4.0-py3-none-manylinux_2_28_aarch64.whl",
+      "url": "https://files.pythonhosted.org/packages/4e/ca/00c70322c19913c81a6bb2239aca83781b97a818b55c2ec3d25cec72dc4c/onnxruntime_ep_webgpu-0.4.0-py3-none-manylinux_2_28_aarch64.whl",
+      "sha256": "17f660db53b1a509c63e721ac6784a2daa1c4e91a968523ee9986505ee5b0a55",
+      "bytes": 6096222
+    },
+    {
+      "replaces": "pillow-12.3.0-cp314-cp314-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl",
+      "name": "pillow-12.3.0-cp314-cp314-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl",
+      "url": "https://files.pythonhosted.org/packages/b1/9d/8b2c807dbef61a5197c047afe99823787eb66f63daf9fb2432f91d6f0462/pillow-12.3.0-cp314-cp314-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl",
+      "sha256": "e9aeb04d6aef139de265b29683e119b638208f88cf73cdd1658aa07221165321",
+      "bytes": 6263757
+    },
+    {
+      "replaces": "protobuf-7.36.2-cp310-abi3-manylinux2014_x86_64.whl",
+      "name": "protobuf-7.36.2-cp310-abi3-manylinux2014_aarch64.whl",
+      "url": "https://files.pythonhosted.org/packages/b6/ea/91fdf7c2b8bbd49cde056f00a9df6773532987e1c00fe2830b895af95c7e/protobuf-7.36.2-cp310-abi3-manylinux2014_aarch64.whl",
+      "sha256": "e11e1f0180583a2af89db6a2ecd9e8dc40aa6d2988ca175bfd0e6d12ea72d74e",
+      "bytes": 344219
+    },
+    {
+      "replaces": "rawpy-0.26.1-cp314-cp314-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl",
+      "name": "rawpy-0.26.1-cp314-cp314-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl",
+      "url": "https://files.pythonhosted.org/packages/9c/d2/2968cc71aaa369ff720d2c175fe1deed261e6be0e95c75c13a805f18eda4/rawpy-0.26.1-cp314-cp314-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl",
+      "sha256": "ab56fb9e8c202e442ede63ccd3c49f9d8069a2c7a17768d2478698eb12c44548",
+      "bytes": 1878877
+    },
+    {
+      "replaces": "python-3.14.7-1-x86_64.pkg.tar.zst",
+      "name": "python-3.14.7-1-aarch64.pkg.tar.xz",
+      "url": "https://fl.us.mirror.archlinuxarm.org/aarch64/core/python-3.14.7-1-aarch64.pkg.tar.xz",
+      "sha256": "17015e87d76198ffda880a95fb5ce46f340a68247bd2b4148a7078d1d3f1f250",
+      "bytes": 13514884
+    }
+  ]
+}

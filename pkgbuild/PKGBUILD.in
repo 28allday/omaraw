@@ -6,7 +6,7 @@ pkgver=0.1.0beta6
 pkgrel=1
 url='https://github.com/28allday/omaraw'
 pkgdesc='Catalog, cull, develop and export photographs'
-arch=('x86_64')
+arch=('@ARCH@')
 license=('GPL-3.0-or-later')
 install=omaraw.install
 options=('!debug' '!lto')
@@ -23,13 +23,16 @@ depends=(
   'mpdecimal' 'zstd' 'xz' 'readline' 'ncurses'
 )
 optdepends=(
-  'vulkan-radeon: GPU processing and interface on AMD graphics'
-  'nvidia-utils: GPU processing and interface on NVIDIA graphics'
-  'vulkan-intel: GPU processing and interface on Intel graphics'
   'vulkan-swrast: a software Vulkan device where no GPU driver exists'
   'gphoto2: command-line camera tools alongside tethering'
   'xdg-desktop-portal-gtk: file dialogs where the desktop has no portal of its own'
 )
+optdepends_x86_64=(
+  'vulkan-radeon: GPU processing and interface on AMD graphics'
+  'nvidia-utils: GPU processing and interface on NVIDIA graphics'
+  'vulkan-intel: GPU processing and interface on Intel graphics'
+)
+optdepends_aarch64=('vulkan-asahi: GPU processing and interface on Apple Silicon with Asahi Linux')
 makedepends=('cmake' 'ninja' 'python' 'python-pip' 'patchelf' 'intltool' 'libxslt' 'iso-codes' 'vulkan-headers')
 checkdepends=('desktop-file-utils')
 
@@ -151,6 +154,13 @@ _engine_environment() {
 }
 
 build() {
+  if [[ $CARCH == aarch64 ]]; then
+    # Hosted ARM runners can have instructions absent from M1/M2. Build for
+    # baseline ARMv8 and use load segments compatible with Asahi's 16 KiB pages.
+    export CFLAGS="$CFLAGS -march=armv8-a -mtune=generic"
+    export CXXFLAGS="$CXXFLAGS -march=armv8-a -mtune=generic"
+    export LDFLAGS="$LDFLAGS -Wl,-z,max-page-size=65536"
+  fi
   python3 "$srcdir/omaraw-$pkgver/tools/package-ai.py" "$srcdir" "$srcdir/ai-stage"
   cmake -S "$srcdir/darktable-$_dt" -B "$srcdir/engine-build" -G Ninja \
     -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$_prefix" \

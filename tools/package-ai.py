@@ -8,10 +8,11 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+from ai_sources import load_sources
 
 root = Path(__file__).resolve().parent.parent
 sources, stage = map(lambda p: Path(p).resolve(), sys.argv[1:3])
-lock = json.loads((root / "pkgbuild/ai-sources.json").read_text())
+lock = load_sources(root)
 abi = lock["python"]
 for entry in lock["sources"]:
     path = sources / entry["name"]
@@ -60,7 +61,10 @@ for path in runtime.rglob("__pycache__"):
 
 notices = stage / "usr/share/licenses/omaraw/ai-runtime"
 notices.mkdir(parents=True, exist_ok=True)
-shutil.copyfile(root / "pkgbuild/ai-sources.json", notices / "sources.json")
+if lock.get("architecture"):
+    (notices / "sources.json").write_text(json.dumps(lock, indent=2) + "\n")
+else:
+    shutil.copyfile(root / "pkgbuild/ai-sources.json", notices / "sources.json")
 python_source = next(e for e in lock["sources"] if e.get("project") == "Python" and e["kind"] == "source")
 with tarfile.open(sources / python_source["name"]) as archive:
     licence = next(m for m in archive if m.name.endswith("/LICENSE") and m.name.count("/") == 1)

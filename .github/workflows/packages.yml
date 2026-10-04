@@ -1,0 +1,56 @@
+name: Package candidates
+
+on:
+  push:
+    branches: [arm64-support]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: package-candidates-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package:
+    name: Arch package (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Prepare disposable runner
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/share/swift /usr/local/share/vcpkg /home/linuxbrew/.linuxbrew
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends systemd-container curl gnupg ca-certificates zstd
+          sudo apt-get clean
+      - name: Build and validate the native package
+        run: bash tools/ci-package.sh '${{ matrix.arch }}'
+      - name: Upload build and validation logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: package-logs-${{ matrix.arch }}-${{ github.run_id }}
+          path: dist/logs/
+          retention-days: 7
+          if-no-files-found: warn
+      - name: Upload verified package candidate and complete sources
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: omaraw-${{ matrix.arch }}-${{ github.sha }}
+          path: dist/packages/
+          retention-days: 7
+          compression-level: 0
+          if-no-files-found: error

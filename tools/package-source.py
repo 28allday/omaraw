@@ -7,16 +7,22 @@ development engine are never included. Dirty snapshots record their diff hash.
 import gzip
 import hashlib
 import io
-import json
 from pathlib import Path
 import os
 import re
 import subprocess
-import sys
 import tarfile
+import argparse
+import platform
+from ai_sources import ARCHITECTURES, load_sources
 
 root = Path(__file__).resolve().parent.parent
-out = Path(sys.argv[1]).resolve()
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument("output", type=Path)
+parser.add_argument("--arch", choices=ARCHITECTURES, default=platform.machine())
+args = parser.parse_args()
+ai_sources = load_sources(root, args.arch)["sources"]
+out = args.output.resolve()
 out.mkdir(parents=True, exist_ok=True)
 
 
@@ -28,7 +34,7 @@ def git(*args):
 # Keep the allowlist at Git's index boundary; never sweep private/untracked
 # working directories into a distributable archive.
 untracked = [name for name in git("ls-files", "--others", "--exclude-standard", "-z").decode().split("\0")
-             if name.startswith(("src/", "data/", "patches/", "tests/", "tools/"))]
+             if name.startswith(("src/", "data/", "patches/", "tests/", "tools/", "pkgbuild/", ".github/"))]
 if untracked:
     raise SystemExit("Required source files are not staged; review and stage them before packaging:\n"
                      + "\n".join(sorted(untracked)))
@@ -74,8 +80,8 @@ assert template.count("@OMARAW_SHA256@") == 1
 install_script = (root / "pkgbuild/omaraw.install").read_bytes()
 (out / "omaraw.install").write_bytes(install_script)
 assert template.count("@INSTALL_SHA256@") == 1
-ai_sources = json.loads((root / "pkgbuild/ai-sources.json").read_text())["sources"]
-(out / "PKGBUILD").write_text(template.replace("@OMARAW_SHA256@", checksum)
+(out / "PKGBUILD").write_text(template.replace("@ARCH@", args.arch)
+                             .replace("@OMARAW_SHA256@", checksum)
                              .replace("@INSTALL_SHA256@", hashlib.sha256(install_script).hexdigest())
                              .replace("@AI_SOURCES@", "\n".join(
                                  f"  '{e['name']}::{e['url']}'" for e in ai_sources))
