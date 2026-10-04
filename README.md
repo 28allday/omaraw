@@ -16,7 +16,8 @@ camera; GPU acceleration depends on its driver.
 Download the beta package from
 [Releases](https://github.com/28allday/omaraw/releases).
 
-On Omarchy or Arch Linux:
+Use an up-to-date Omarchy or Arch Linux installation. The packages require
+OpenEXR 3.5 or later from the distribution repositories.
 
 1. Open a terminal (**Super+Enter** on Omarchy).
 2. Download and run the installer:

@@ -14,7 +14,7 @@ depends=(
   'glibc' 'libgcc' 'libstdc++' 'libgomp' 'qt6-base' 'qt6-declarative' 'qt6-imageformats' 'qt6-svg'
   'qt6-multimedia' 'qt6-multimedia-ffmpeg'
   'libraw' 'exiv2' 'libgphoto2' 'libheif' 'lcms2' 'opencolorio>=2.5' 'lensfun' 'sqlite'
-  'glib2' 'gtk3' 'libxml2' 'potrace' 'openexr' 'imath' 'libjxl' 'libwebp'
+  'glib2' 'gtk3' 'libxml2' 'potrace' 'openexr>=3.5' 'imath' 'libjxl' 'libwebp'
   'libavif' 'librsvg' 'pugixml' 'json-glib' 'curl' 'libjpeg-turbo' 'libpng'
   'libtiff' 'zlib' 'opencv' 'openjpeg2' 'hicolor-icon-theme'
   'xdg-desktop-portal' 'libplacebo' 'vulkan-icd-loader'
