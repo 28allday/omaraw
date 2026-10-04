@@ -1,5 +1,7 @@
 # Development defaults to a sibling checkout. Packages supply separate
 # source, build, staged install and final runtime paths (docs/BUILDING.md).
+SOURCES += $$PWD/src/engine/working_cache.c
+HEADERS += $$PWD/src/engine/working_cache.h
 DT_SRC = $$(OMARAW_DT_SRC)
 DT_BUILD = $$(OMARAW_DT_BUILD)
 DT_INSTALL = $$(OMARAW_DT_INSTALL)

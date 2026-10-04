@@ -1,4 +1,5 @@
 #include "bridge.h"
+#include "working_cache.h"
 #include "../imagematchmath.h"
 #include "../creativeprofiledata.h"
 #include "dng_gain.h"
@@ -9,6 +10,7 @@
 #include "common/exif.h"
 
 #include "common/darktable.h"
+#include "develop/pixelpipe_cache.h"
 #include "common/film.h"
 #include "common/image.h"
 #include "common/image_cache.h"
@@ -135,6 +137,7 @@ int oma_engine_init(const char *prefix, const char *configdir, const char *cache
         return 0;
     }
     g_error[0] = 0;
+    dt_omaraw_working_cache_callbacks(oma_working_alloc, oma_working_free, oma_working_prepare);
     char *datadir = g_strdup_printf("%s/share/darktable", prefix);
     char *moduledir = g_strdup_printf("%s/lib/darktable", prefix);
     g_mkdir_with_parents(configdir, 0700);
@@ -2009,6 +2012,7 @@ int oma_engine_export_described(int imgid, const char *path, const char *name, i
         set_error("Reconnect the original or its full offline copy to export; only a Smart Preview is available", NULL); return -1;
     }
     g_error[0] = 0;
+    const uint64_t working_failures = oma_working_get_stats().failures;
     oma_param_info camera_stock = {0};
     oma_engine_param_get(imgid, "omarawprint", "stock", &camera_stock);
     if (camera_stock.found && camera_stock.enabled && camera_stock.value == 22) {
@@ -2167,6 +2171,8 @@ int oma_engine_export_described(int imgid, const char *path, const char *name, i
     storage->free_params(storage, sdata);
     format->free_params(format, fdata);
     g_list_free(ids);
+    if (res && oma_working_get_stats().failures != working_failures)
+        set_error("Not enough working memory or disk cache space. Free cache space or increase the cache allowance and retry.", NULL);
     if (res && !g_error[0]) set_error("export failed", NULL);
     return res ? -1 : 0;
 }

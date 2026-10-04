@@ -1,0 +1,159 @@
+--- a/src/develop/pixelpipe_cache.h
++++ b/src/develop/pixelpipe_cache.h
+@@ -19,6 +19,13 @@
+ #pragma once
+ 
+ #include <inttypes.h>
++
++// OmaRaw installs these before starting the engine. Allocations and releases
++// remain paired across every preview, thumbnail and export pixelpipe.
++void dt_omaraw_working_cache_callbacks(void *(*allocate)(size_t), void (*release)(void *),
++                                      int (*prepare)(const void *, size_t, void *, size_t));
++// Called only between completed stages; invalidate and abort on failure.
++int dt_omaraw_working_prepare(const void *input, size_t input_bytes, void *output, size_t anticipated);
+ 
+ struct dt_dev_pixelpipe_t;
+ struct dt_iop_buffer_dsc_t;
+--- a/src/develop/pixelpipe_cache.c
++++ b/src/develop/pixelpipe_cache.c
+@@ -22,6 +22,30 @@
+ #include "libs/lib.h"
+ #include "libs/colorpicker.h"
+ #include <stdlib.h>
++
++static void *(*working_allocate)(size_t);
++static void (*working_release)(void *);
++static int (*working_prepare)(const void *, size_t, void *, size_t);
++void dt_omaraw_working_cache_callbacks(void *(*allocate)(size_t), void (*release)(void *),
++                                      int (*prepare)(const void *, size_t, void *, size_t))
++{
++  working_allocate = allocate;
++  working_release = release;
++  working_prepare = prepare;
++}
++int dt_omaraw_working_prepare(const void *input, size_t input_bytes, void *output, size_t anticipated)
++{
++  return working_prepare ? working_prepare(input, input_bytes, output, anticipated) : 1;
++}
++static void *working_alloc(size_t bytes)
++{
++  return working_allocate ? working_allocate(bytes) : dt_alloc_aligned(bytes);
++}
++static void working_free(void *pixels)
++{
++  if(working_release) working_release(pixels);
++  else dt_free_align(pixels);
++}
+ 
+ gboolean dt_dev_pixelpipe_cache_init(dt_dev_pixelpipe_t *pipe,
+                                      const int entries,
+@@ -53,7 +77,7 @@
+   for(int k = 0; k < entries; k++)
+   {
+     cache->size[k] = size;
+-    cache->data[k] = (void *)dt_alloc_aligned(size);
++    cache->data[k] = working_alloc(size);
+     if(!cache->data[k])
+       goto alloc_memory_fail;
+ 
+@@ -67,7 +91,7 @@
+   // but will only fail to generate thumbnails for example.
+   for(int k = 0; k < cache->entries; k++)
+   {
+-    dt_free_align(cache->data[k]);
++    working_free(cache->data[k]);
+     cache->size[k] = 0;
+     cache->data[k] = NULL;
+   }
+@@ -89,7 +113,7 @@
+ 
+   for(int k = 0; k < cache->entries; k++)
+   {
+-    dt_free_align(cache->data[k]);
++    working_free(cache->data[k]);
+     cache->data[k] = NULL;
+   }
+   free(cache->data);
+@@ -327,9 +351,9 @@
+   if(((cache->entries == DT_PIPECACHE_MIN) && (cache->size[cline] < size))
+      || ((cache->entries > DT_PIPECACHE_MIN) && (cache->size[cline] != size)))
+   {
+-    dt_free_align(cache->data[cline]);
++    working_free(cache->data[cline]);
+     cache->allmem -= cache->size[cline];
+-    cache->data[cline] = (void *)dt_alloc_aligned(size);
++    cache->data[cline] = working_alloc(size);
+     if(cache->data[cline])
+     {
+       cache->size[cline] = size;
+@@ -348,7 +372,7 @@
+   *dsc = &cache->dsc[cline];
+ 
+   const gboolean masking = pipe->mask_display != DT_DEV_PIXELPIPE_DISPLAY_NONE;
+-  cache->hash[cline]      = masking ? DT_INVALID_HASH : hash;
++  cache->hash[cline]      = masking || !*data ? DT_INVALID_HASH : hash;
+ 
+   const dt_iop_buffer_dsc_t *cdsc = *dsc;
+   dt_print_pipe(DT_DEBUG_PIPE | DT_DEBUG_VERBOSE, "pipe cache get",
+@@ -433,7 +457,7 @@
+ {
+   const size_t removed = cache->size[k];
+ 
+-  dt_free_align(cache->data[k]);
++  working_free(cache->data[k]);
+   cache->allmem -= removed;
+   cache->size[k] = 0;
+   cache->data[k] = NULL;
+--- a/src/develop/pixelpipe_hb.c
++++ b/src/develop/pixelpipe_hb.c
+@@ -2196,6 +2196,12 @@
+   pipe->dsc.cst = input_format->cst;
+   const gboolean important_out = dt_pipe_is_screen(pipe) && (module->flags() & IOP_FLAGS_WRITE_PIPECACHE);
+   dt_dev_pixelpipe_cache_get(pipe, hash, bufsize, output, out_format, module, important_out);
++  if(!*output) return -1;
++  if(!dt_omaraw_working_prepare(input, bufsize, *output, bufsize))
++  {
++    dt_dev_pixelpipe_cache_flush(pipe);
++    return -1;
++  }
+   *cl_mem_output = NULL;
+   const int w = roi_out->width, h = roi_out->height;
+   dt_times_t start;
+@@ -2339,6 +2345,7 @@
+     else if(dt_dev_pixelpipe_cache_get(pipe, hash, bufsize,
+                                        output, out_format, NULL, FALSE))
+     {
++      if(!*output) return TRUE;
+       if(roi_in.scale == 1.0f)
+       {
+         /*  fast branch for 1:1 pixel copies. Supports all type of files via bpp.
+@@ -2553,6 +2560,7 @@
+   // reserve new cache line for output
+   dt_dev_pixelpipe_cache_get(pipe, hash, bufsize,
+                              output, out_format, module, important_out && !visualize_mask);
++  if(!*output) return TRUE;
+ 
+   dt_times_t start;
+   dt_get_perf_times(&start);
+@@ -2613,6 +2621,21 @@
+      step is anyhow done on cpu. we assume that blending itself will
+      never require tiling in cpu path, because memory requirements
+      will still be low enough. */
++
++  // Previous stage workers have joined. Preserve its input at the same address
++  // and back the new output if upcoming scratch would put pressure on RAM.
++  const size_t input_bytes = (size_t)roi_in.width * roi_in.height * in_bpp;
++  const double estimate = MAX(1.0f, tiling.factor - 1.0f) * MAX(input_bytes, bufsize) + tiling.overhead;
++  const size_t anticipated = (size_t)MIN((double)(SIZE_MAX / 2),
++      _piece_may_tile(piece) ? MIN(estimate, (double)dt_get_available_mem()) : estimate);
++  if(!dt_omaraw_working_prepare(input, input_bytes, *output, anticipated))
++  {
++    dt_dev_pixelpipe_cache_flush(pipe);
++#ifdef HAVE_OPENCL
++    dt_opencl_release_mem_object(cl_mem_input);
++#endif
++    return TRUE;
++  }
+ 
+   assert(tiling.factor > 0.0f);
+   assert(tiling.factor_cl > 0.0f);

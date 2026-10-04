@@ -37,6 +37,7 @@ signals:
     void diskCacheChanged();
     void cacheChanged();
 private:
+    void configureWorkingCache();
     void maintain(bool clear);
     int m_systemMiB = 4096, m_memoryMiB = 0, m_diskGiB = 4;
     qint64 m_used = -1, m_free = -1;

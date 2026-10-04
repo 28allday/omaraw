@@ -2953,6 +2953,8 @@ void Backend::setEngine(EngineService *engine) {
     m_engine = engine;
     if (!engine) return;
     engine->setMemoryBudget(m_resources.effectiveMemoryMiB());
+    // Library recovery may choose its cache location after Backend construction.
+    m_resources.refreshCache();
     connect(static_cast<DenoiseService *>(engine->denoise()), &DenoiseService::saved, this,
             [this, engine](const QString &path, const QString &original, int variant) {
         const auto source = m_catalog.asset(m_catalog.idForPath(original, variant));

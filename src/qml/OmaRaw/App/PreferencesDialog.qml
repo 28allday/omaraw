@@ -157,7 +157,7 @@ C.Dialog {
                         onEditingFinished: v => backend.resources.memoryMiB = Math.round(v * 1024)
                     }
                     Note { text: qsTr("Shared by image processing, decoded photos and reusable previews. More memory can speed up photo switching and editing. Large photos, exports and AI can temporarily use additional memory. Changes apply after the current processing step.") }
-                    Heading { title: qsTr("Disk preview cache") }
+                    Heading { title: qsTr("Disk cache") }
                     SliderField {
                         objectName: "diskCachePreference"
                         width: parent.width; stacked: true; label: qsTr("Maximum cache size")
@@ -165,7 +165,7 @@ C.Dialog {
                         value: backend.resources.diskCacheGiB
                         onEditingFinished: v => backend.resources.diskCacheGiB = Math.round(v)
                     }
-                    Note { text: qsTr("Keep browsing previews on disk so they load faster next time. This limit applies to the cache folder below. Older previews are removed automatically; space is used only as needed.") }
+                    Note { text: qsTr("Store browsing previews and temporary processing data on disk. Large image buffers stay in RAM while there is room, and gain disk backing when needed during editing and export. Older previews are removed automatically; space is used only as needed.") }
                     Note { objectName: "previewCacheUsage"; text: backend.resources.cacheUsage }
                     Note { text: backend.resources.cachePath; wrapMode: Text.WrapAnywhere }
                     Flow {

@@ -2,7 +2,7 @@
 # bin/package snapshots the app and fills its checksum in this template.
 
 pkgname=omaraw
-pkgver=0.1.0beta5
+pkgver=0.1.0beta6
 pkgrel=1
 url='https://github.com/28allday/omaraw'
 pkgdesc='Catalog, cull, develop and export photographs'
@@ -108,6 +108,7 @@ prepare() {
   patch -d "$srcdir/darktable-$_dt" -p1 < "$srcdir/omaraw-$pkgver/patches/darktable-omaraw-print-display.patch"
   patch -d "$srcdir/darktable-$_dt" -p1 < "$srcdir/omaraw-$pkgver/patches/darktable-omaraw-digital-film.patch"
   patch -d "$srcdir/darktable-$_dt" -p1 < "$srcdir/omaraw-$pkgver/patches/darktable-omaraw-workflow-restore.patch"
+  patch -d "$srcdir/darktable-$_dt" -p1 < "$srcdir/omaraw-$pkgver/patches/darktable-omaraw-working-cache.patch"
   cp "$srcdir/omaraw-$pkgver/src/engine/imagematch.c" "$srcdir/darktable-$_dt/src/iop/omarawmatch.c"
   cp "$srcdir/omaraw-$pkgver/src/imagematchmath.h" "$srcdir/darktable-$_dt/src/common/imagematchmath.h"
   cp "$srcdir/omaraw-$pkgver/src/creativeprofiledata.h" "$srcdir/darktable-$_dt/src/common/creativeprofiledata.h"
@@ -269,7 +270,7 @@ package() {
   printf 'engine_raw_fallback_patch_sha256=%s\n' "$(sha256sum "$app/patches/darktable-omaraw-raw-fallback.patch" | cut -d' ' -f1)" >> "$pkgdir/usr/share/doc/$pkgname/build-info"
   printf 'engine_preview_alignment_patch_sha256=%s\n' "$(sha256sum "$app/patches/darktable-omaraw-preview-alignment.patch" | cut -d' ' -f1)" >> "$pkgdir/usr/share/doc/$pkgname/build-info"
   printf 'libraw_r6iii_patch_sha256=%s\n' "$(sha256sum "$app/patches/libraw-omaraw-r6iii.patch" | cut -d' ' -f1)" >> "$pkgdir/usr/share/doc/$pkgname/build-info"
-  for notice in darktable-omaraw-creative-profile darktable-omaraw-enhanced-profile darktable-omaraw-dng-gain darktable-omaraw-colour-order darktable-omaraw-primaries darktable-omaraw-print-calibration darktable-omaraw-print-display darktable-omaraw-digital-film darktable-omaraw-workflow-restore rawspeed-omaraw-dng-jxl; do
+  for notice in darktable-omaraw-creative-profile darktable-omaraw-enhanced-profile darktable-omaraw-dng-gain darktable-omaraw-colour-order darktable-omaraw-primaries darktable-omaraw-print-calibration darktable-omaraw-print-display darktable-omaraw-digital-film darktable-omaraw-workflow-restore darktable-omaraw-working-cache rawspeed-omaraw-dng-jxl; do
     printf '%s_sha256=%s\n' "$notice" "$(sha256sum "$app/patches/$notice.patch" | cut -d' ' -f1)" >> "$pkgdir/usr/share/doc/$pkgname/build-info"
   done
   printf 'rawspeed_arw6_patch_sha256=%s\n' "$(sha256sum "$app/patches/rawspeed-omaraw-arw6.patch" | cut -d' ' -f1)" >> "$pkgdir/usr/share/doc/$pkgname/build-info"
