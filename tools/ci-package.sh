@@ -63,7 +63,7 @@ nspawn=(sudo systemd-nspawn --directory="$rootfs" --register=no --console=pipe
 "${nspawn[@]}" /bin/bash -euc '
   pacman-key --init
   pacman-key --populate "$1"
-  # The bootstrap can be newer than Omarchy's snapshot. Downgrade it too,
+  # The bootstrap can be newer than the Omarchy snapshot. Downgrade it too,
   # inside this disposable root only, before compiling against its libraries.
   pacman -Syuu --needed --noconfirm base-devel git python python-pip imagemagick
   pacman -Q > /work/report/build-packages.txt
