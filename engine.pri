@@ -26,7 +26,10 @@ exists($$DT_INSTALL/lib/darktable/libdarktable.so) {
     isEmpty(DT_CFLAGS): error(Cannot read the matching darktable compiler flags)
     QMAKE_CFLAGS += $$DT_CFLAGS -std=gnu99 -fopenmp -Wno-unused-parameter
     PKGCONFIG += glib-2.0 gmodule-2.0 sqlite3 lensfun
-    LIBS += -L$$DT_INSTALL/lib/darktable -ldarktable -Wl,-rpath,$$DT_RUNTIME_PREFIX/lib/darktable -fopenmp
+    # Qt appends its own library directory to LFLAGS. Put our patched engine
+    # ahead of it so an installed standalone darktable cannot shadow it.
+    QMAKE_LFLAGS += -Wl,-rpath,$$DT_RUNTIME_PREFIX/lib/darktable
+    LIBS += -L$$DT_INSTALL/lib/darktable -ldarktable -fopenmp
 } else {
     contains(CONFIG, require_engine): error(A package requires a built darktable engine at $$DT_INSTALL)
     message(darktable engine: not found at $$DT_INSTALL — building previews-only)

@@ -166,6 +166,7 @@ Rectangle {
     }
     WheelHandler {
         enabled: root.wheelEnabled
+        acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
         target: null
         onWheel: event => {
             const ticks = event.angleDelta.y ? event.angleDelta.y / 120 : event.pixelDelta.y / 30

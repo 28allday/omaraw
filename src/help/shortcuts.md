@@ -1,6 +1,6 @@
 # Keyboard
 
-Press **?** for the cheat sheet with every shortcut, and Edit ▸ Preferences ▸ Keyboard to change them. The most used:
+Press **?** for the searchable keyboard shortcuts window. Edit ▸ Keyboard Shortcuts and Help ▸ Keyboard Shortcuts open the same window. Search by action or key, click a binding to change it, or use its reset button to restore the default. Hold-to-peek keys are listed for reference and cannot be reassigned. **Escape** closes the window, or cancels an active key capture. The most used:
 
 - **Ctrl+1 to Ctrl+4**: Library, Develop, Capture, Output.
 - **Ctrl+I** import, **Ctrl+Shift+E** export, **Ctrl+K** command search, **F1** help.

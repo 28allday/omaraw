@@ -77,6 +77,14 @@ QVariantMap LaunchScreen::nextQuote(QSettings &settings) {
 }
 
 int LaunchScreen::run() {
+    // The welcome animation is painted from CPU images. Software decoding
+    // avoids unreliable hardware-decoder readback on Asahi. Keep explicit
+    // user overrides and restore the environment before starting workers.
+    const bool decodingOverride = qEnvironmentVariableIsSet("QT_FFMPEG_DECODING_HW_DEVICE_TYPES");
+    if (!decodingOverride) qputenv("QT_FFMPEG_DECODING_HW_DEVICE_TYPES", ",");
+    const auto restoreDecoder = qScopeGuard([decodingOverride] {
+        if (!decodingOverride) qunsetenv("QT_FFMPEG_DECODING_HW_DEVICE_TYPES");
+    });
     const bool quitOnClose = QGuiApplication::quitOnLastWindowClosed();
     QGuiApplication::setQuitOnLastWindowClosed(false);
     const auto restore = qScopeGuard([quitOnClose] { QGuiApplication::setQuitOnLastWindowClosed(quitOnClose); });
@@ -86,6 +94,8 @@ int LaunchScreen::run() {
     qml.addImportPath(QStringLiteral(":/qml"));
     qml.setInitialProperties({{"version", QCoreApplication::applicationVersion()},
                               {"quote", nextQuote(settings)},
+                              {"softwareInterface", QQuickWindow::graphicsApi() == QSGRendererInterface::Software
+                                  || QQuickWindow::sceneGraphBackend() == QStringLiteral("software")},
                               {"reduceMotion", settings.value("access/reducedMotion", false)}});
     qml.load(QUrl(QStringLiteral("qrc:/qml/OmaRaw/App/LaunchWindow.qml")));
     if (qml.rootObjects().isEmpty()) {

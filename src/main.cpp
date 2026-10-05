@@ -87,7 +87,21 @@ static int runApplication(int argc, char *argv[]) {
     // process and stay until that process has gone, after OmaRAW's locks.
     parser.addOption({QStringLiteral("await-exit"), QStringLiteral("Wait for the window that started this one to exit"), QStringLiteral("pid")});
     Headless::addOptions(parser);
-    parser.addPositionalArgument(QStringLiteral("folder"), QStringLiteral("Folder to import"), QStringLiteral("[folder]"));
+    parser.setApplicationDescription(QStringLiteral(
+        "OmaRAW — photograph editing for Omarchy.\n\n"
+        "Open the app: omaraw [folder]\n"
+        "Headless:     omaraw [--catalog FILE] COMMAND [arguments] [options]\n\n"
+        "Commands:\n"
+        "  import FOLDER   Import photographs (add, copy, move or verify).\n"
+        "  list            List photographs using the optional filters.\n"
+        "  export FOLDER   Export photographs into a directory.\n"
+        "  inspect         Inspect catalog, photo and processing state.\n"
+        "  apply FILE      Apply operations from a JSON file.\n"
+        "  ops             List available operations and their arguments.\n"
+        "  skill           Show the agent skill and installation status.\n"
+        "                  Use skill --link to install links for your agents.\n\n"
+        "Headless commands return JSON. See the installed docs/cli.md for examples."));
+    parser.addPositionalArgument(QStringLiteral("command-or-folder"), QStringLiteral("A command above, or a folder to open in the app"), QStringLiteral("[command [arguments...] | folder]"));
     // Headless, a mistyped option is answered the way everything else is:
     // one JSON object and exit 2, not a line of text a script cannot read.
     if (headless) {

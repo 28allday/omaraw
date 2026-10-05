@@ -1,6 +1,6 @@
 # Building OmaRAW
 
-On Arch Linux or Omarchy, install the build tools and clone the source:
+On Omarchy, install the build tools and clone the source:
 
 ```sh
 sudo pacman -S --needed base-devel git python
@@ -32,7 +32,7 @@ no sibling application or private development checkout is needed.
 ## ARM64 and Omarchy Mac
 
 The same recipe supports native `x86_64` and `aarch64` builds. The ARM target is
-Arch Linux ARM, including Omarchy Mac on Asahi Alarm for M1/M2. Build inside a
+Omarchy Mac on Asahi Alarm for M1/M2. Build inside a
 matching Arch userspace; an Ubuntu ARM runner alone is not that environment.
 Beta 7 includes both architectures. ARM package and hardware checks were run on
 an M2 Mac with Asahi's 16 KiB pages; future changes still need hardware testing.
@@ -63,6 +63,13 @@ replace release assets or publish a release. Check both jobs before promoting
 a candidate. Validation includes fully decoded exports in all seven formats,
 loading the five bundled AI models, a real editable AI selection and GUI startup
 with networking disabled. Hosted runners do not qualify Apple GPU behavior.
+
+The x86 builder synchronises the entire disposable root with Omarchy's stable
+mirror, including downgrades from a newer bootstrap. The ARM builder uses the
+Arch Linux ARM repositories used by Omarchy Mac. Package dependencies record
+the OpenEXR and OpenJPH versions used by each builder. Validation also installs
+standalone darktable and checks that OmaRAW still loads its own private engine.
+Repository URLs and package versions are retained with the build logs.
 
 The x86 complete-source filename stays unchanged. The ARM complete-source bundle
 adds `-aarch64` before `.src.tar.gz`, so both can be attached to one release.

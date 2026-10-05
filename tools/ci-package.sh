@@ -13,7 +13,8 @@ case "$architecture" in
     fingerprint=3E80CA1A8B89F69CBA57D98A76A5EF9054449A5C
     keyring=archlinux
     strip=1
-    mirror='https://geo.mirror.pkgbuild.com/$repo/os/$arch'
+    # Match the repositories available to Omarchy stable installations.
+    mirror='https://stable-mirror.omarchy.org/$repo/os/$arch'
     ;;
   aarch64)
     rootfs_url=https://fl.us.mirror.archlinuxarm.org/os/ArchLinuxARM-aarch64-latest.tar.gz
@@ -62,7 +63,11 @@ nspawn=(sudo systemd-nspawn --directory="$rootfs" --register=no --console=pipe
 "${nspawn[@]}" /bin/bash -euc '
   pacman-key --init
   pacman-key --populate "$1"
-  pacman -Syu --needed --noconfirm base-devel git python python-pip imagemagick
+  # The bootstrap can be newer than Omarchy's snapshot. Downgrade it too,
+  # inside this disposable root only, before compiling against its libraries.
+  pacman -Syuu --needed --noconfirm base-devel git python python-pip imagemagick
+  pacman -Q > /work/report/build-packages.txt
+  cp /etc/pacman.d/mirrorlist /work/report/build-mirrorlist.txt
   useradd --create-home --uid 2000 builder
   printf "builder ALL=(ALL) NOPASSWD: /usr/bin/pacman\n" > /etc/sudoers.d/omaraw-builder
   chmod 440 /etc/sudoers.d/omaraw-builder
@@ -86,6 +91,8 @@ sudo cp "$work/source.bundle" "$rootfs/work/source.bundle"
 "${nspawn[@]}" /bin/bash -euc '
   package=(/work/source/build-package/omaraw-*.pkg.tar.zst)
   test "${#package[@]}" = 1
+  # Exercise coexistence with the standalone engine, not just a clean root.
+  pacman -S --needed --noconfirm darktable
   pacman -U --noconfirm "${package[0]}"
   pacman -Q > /work/report/system-packages.txt
   cd /work/source/build-package

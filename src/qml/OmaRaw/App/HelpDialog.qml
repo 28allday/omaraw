@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import QtCore
 import QtQuick.Controls.Basic as C
 import OmaRaw.Ui
 
@@ -14,6 +15,13 @@ C.Popup {
     property var shell: null
     property string section: "start"
     property string filter: ""
+    property int textSize: 18
+    property bool expanded: false
+    Settings {
+        category: "help"
+        property alias textSize: root.textSize
+        property alias expanded: root.expanded
+    }
     readonly property var sections: backend.helpSections()
     readonly property var shown: {
         const q = root.filter.trim().toLowerCase()
@@ -31,11 +39,12 @@ C.Popup {
     }
 
     modal: false
+    focus: true
     closePolicy: C.Popup.CloseOnEscape
     parent: C.Overlay.overlay
     anchors.centerIn: parent
-    width: Math.min(980, (parent ? parent.width : 1000) - 2 * Theme.s5)
-    height: Math.min(720, (parent ? parent.height : 800) - 2 * Theme.s5)
+    width: Math.min(expanded ? 100000 : 1120, (parent ? parent.width : 1160) - 24)
+    height: Math.min(expanded ? 100000 : 800, (parent ? parent.height : 824) - 24)
     padding: 0
     background: Rectangle { color: Theme.panelRaised; border.width: Theme.hairline; border.color: Theme.borderStrong; radius: Theme.rMenu }
 
@@ -44,37 +53,61 @@ C.Popup {
         // ── header ───────────────────────────────────────────────────────
         Item {
             id: header
-            width: parent.width; height: Theme.hDockHeader + Theme.s2
+            readonly property bool compact: width < 720
+            width: parent.width; height: compact ? 132 : 92
             Text {
-                anchors.left: parent.left; anchors.leftMargin: Theme.s4
-                anchors.verticalCenter: parent.verticalCenter
-                text: qsTr("OmaRAW Help")
+                x: Theme.s4; y: 12
+                width: guideButton.x - x - Theme.s2
+                text: qsTr("OmaRAW Help"); elide: Text.ElideRight
                 font.family: Theme.fontFamily; font.pixelSize: Theme.fsTitle; font.weight: Theme.wHeading; color: Theme.textPrimary
-            }
-            SearchField {
-                id: search
-                objectName: "helpSearch"
-                anchors.right: guideButton.left; anchors.rightMargin: Theme.s2
-                anchors.verticalCenter: parent.verticalCenter
-                width: 240
-                placeholder: qsTr("Search the help")
-                tip: qsTr("Find pages by their title or any words in the guide.")
-                onTextChanged: root.filter = text
             }
             IconButton {
                 id: guideButton
                 anchors.right: closeButton.left; anchors.rightMargin: Theme.s1
-                anchors.verticalCenter: parent.verticalCenter
+                y: 6
                 iconName: "file"; text: qsTr("The written guide")
-                tip: qsTr("Opens the folder holding the full guide and these pages as files, installed with the program.")
+                tip: qsTr("Open the folder holding the full guide and help pages.")
                 onClicked: backend.revealDocumentation()
             }
             IconButton {
                 id: closeButton
                 anchors.right: parent.right; anchors.rightMargin: Theme.s2
-                anchors.verticalCenter: parent.verticalCenter
+                y: 6
                 iconName: "x"; text: qsTr("Close"); shortcut: "Esc"
                 onClicked: root.close()
+            }
+            SearchField {
+                id: search
+                objectName: "helpSearch"
+                x: Theme.s4; y: 48
+                width: header.compact ? parent.width - Theme.s4 * 2 : Math.min(300, tools.x - x - Theme.s3)
+                placeholder: qsTr("Search the help")
+                tip: qsTr("Find pages by their title or any words in the guide.")
+                onTextChanged: root.filter = text
+            }
+            Row {
+                id: tools
+                anchors.right: parent.right; anchors.rightMargin: Theme.s4
+                y: header.compact ? 88 : 48
+                spacing: Theme.s2
+                ToolButton {
+                    objectName: "helpSmaller"
+                    text: "A−"; showLabel: true; tip: qsTr("Make help text smaller.")
+                    enabled: root.textSize > 12
+                    onClicked: root.textSize = Math.max(12, root.textSize - 2)
+                }
+                ToolButton {
+                    objectName: "helpLarger"
+                    text: "A+"; showLabel: true; tip: qsTr("Make help text larger.")
+                    enabled: root.textSize < 32
+                    onClicked: root.textSize = Math.min(32, root.textSize + 2)
+                }
+                ToolButton {
+                    objectName: "helpExpand"
+                    text: root.expanded ? qsTr("Restore size") : qsTr("Expand"); showLabel: true
+                    tip: qsTr("Use the full application window for reading.")
+                    onClicked: root.expanded = !root.expanded
+                }
             }
             Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: Theme.hairline; color: Theme.border }
         }
@@ -83,7 +116,7 @@ C.Popup {
             id: list
             objectName: "helpList"
             anchors.top: header.bottom; anchors.bottom: parent.bottom; anchors.left: parent.left
-            width: 230
+            width: Math.min(230, root.width * 0.28)
             clip: true
             C.ScrollBar.vertical: ScrollBar {}
             C.ScrollBar.horizontal.policy: C.ScrollBar.AlwaysOff
@@ -116,6 +149,7 @@ C.Popup {
                                 anchors.left: parent.left; anchors.leftMargin: Theme.s4
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: row.modelData.title
+                                width: parent.width - Theme.s4 * 2; elide: Text.ElideRight
                                 font.family: Theme.fontFamily; font.pixelSize: Theme.fsControl; color: row.active ? Theme.textPrimary : Theme.textSecondary
                             }
                             HoverHandler { id: hover }
@@ -149,7 +183,8 @@ C.Popup {
                 textFormat: Text.MarkdownText
                 wrapMode: Text.Wrap
                 text: root.body
-                font.family: Theme.fontFamily; font.pixelSize: Theme.fsControl
+                lineHeight: 1.2
+                font.family: Theme.fontFamily; font.pixelSize: Math.max(12, Math.min(32, root.textSize))
                 color: Theme.textPrimary
                 linkColor: Theme.accent
                 onLinkActivated: link => Qt.openUrlExternally(link)

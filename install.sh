@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Download a beta/release package, verify its checksum, then use pacman.
 set -euo pipefail
-version=0.1.0-beta.7
+version=0.1.0-beta.8
 download_dir=
 usage() {
   printf '%s\n' 'Usage: bash install.sh [--version VERSION] [--download-only DIRECTORY]' \
-    'Installs the matching Arch/Omarchy x86_64 or aarch64 package from a GitHub release.'
+    'Installs the matching Omarchy x86_64 or aarch64 package from a GitHub release.'
 }
 while (($#)); do
   case "$1" in
@@ -63,6 +63,16 @@ if [[ -n $download_dir ]]; then
   cp -- "$temporary/$package" "$download_dir/$package"
   printf 'Verified package saved: %s\n' "$download_dir/$package"
 else
+  printf '%s\n' 'Checking package dependencies against your configured repositories…'
+  if ! pacman -Up --print-format '%n %v' "$temporary/$package" > "$temporary/transaction" 2> "$temporary/dependencies.log"; then
+    cat "$temporary/dependencies.log" >&2
+    printf '%s\n' \
+      'OmaRAW cannot be installed with the dependencies currently available on this system.' \
+      'Run a full Omarchy update, then retry. If dependencies are still unavailable, report the error at:' \
+      'https://github.com/28allday/omaraw/issues/3' \
+      'Include your Omarchy version and architecture. Nothing was installed.' >&2
+    exit 1
+  fi
   printf '%s\n' 'Checksum verified. Pacman will show the package and required dependencies.'
   if ((EUID == 0)); then pacman -U "$temporary/$package"
   else sudo pacman -U "$temporary/$package"; fi

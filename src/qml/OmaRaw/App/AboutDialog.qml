@@ -36,6 +36,13 @@ C.Popup {
             font.family: Theme.fontFamily; font.pixelSize: Theme.fsLabel; color: Theme.textPrimary
         }
         Text {
+            objectName: "aboutRenderingStatus"
+            width: parent.width; wrapMode: Text.Wrap
+            text: (backend.softwareInterface ? qsTr("Interface: software rendering (CPU).") : qsTr("Interface: GPU rendering."))
+                + " " + qsTr("Photo processing acceleration is configured separately in Preferences.")
+            font.family: Theme.fontFamily; font.pixelSize: Theme.fsControl; color: Theme.textSecondary
+        }
+        Text {
             width: parent.width; wrapMode: Text.Wrap
             text: engine.available
                   ? qsTr("Built on darktable %1 (GPL-3.0-or-later) with rawspeed and LibRaw, OpenColorIO, libplacebo and Vulkan, Qt 6 and Lucide icons. The licences of every component are installed with the program.").arg(engine.version)

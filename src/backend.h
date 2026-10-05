@@ -43,6 +43,7 @@ class Backend : public QObject {
     Q_PROPERTY(bool fileJobBusy READ fileJobBusy NOTIFY fileJobChanged)
     Q_PROPERTY(int totalCount READ totalCount NOTIFY catalogChanged)
     Q_PROPERTY(QString version READ version CONSTANT)
+    Q_PROPERTY(bool softwareInterface READ softwareInterface CONSTANT)
     Q_PROPERTY(QVariantList outputTemplates READ outputTemplates NOTIFY workflowPresetsChanged)
     Q_PROPERTY(QVariantList metadataImportPresets READ metadataImportPresets NOTIFY workflowPresetsChanged)
 
@@ -140,6 +141,7 @@ public:
     Q_INVOKABLE QVariantMap lastImportResult() const;
     int totalCount() const { return m_totalCount; }
     QString version() const;
+    bool softwareInterface() const;
 
     AssetModel *model() { return &m_model; }
 
@@ -620,7 +622,8 @@ private:
     CatalogMaintenance m_maintenance;
     int m_folderListingRequest = 0;
     int m_firstEditChecked = 0;   // giveFirstEdit: the photo already looked at
-    void refresh();
+    void refresh(bool preservePosition = false);
+    void refreshAfterCull(int id);
     void refreshCounts();
     void followMovedFile(const QString &from, const QString &to);
     void finishMovedFile(const QString &from, const QString &to, const QString &error);
