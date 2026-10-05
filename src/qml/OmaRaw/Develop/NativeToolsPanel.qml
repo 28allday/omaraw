@@ -62,10 +62,14 @@ Column {
         text: qsTr("More tools")
         font.family: Theme.fontFamily; font.pixelSize: Theme.fsLabel; font.weight: Theme.wHeading; font.capitalization: Font.AllUppercase; font.letterSpacing: 0.6; color: Theme.textSecondary
     }
-    Row {
+    Item {
         visible: !root.embedded
-        x: Theme.s3; width: parent.width - Theme.s3 * 2; spacing: Theme.s1
-        ComboField {
+        width: parent.width
+        height: visible ? toolPicker.implicitHeight : 0
+        Row {
+            id: toolPicker
+            x: Theme.s3; width: parent.width - Theme.s3 * 2; spacing: Theme.s1
+            ComboField {
             width: parent.width - actions.width - toggle.width - Theme.s1 * 2
             model: root.operations.map(op => Names.module(op, op))
             currentIndex: Math.min(root.selection, root.operations.length - 1)
@@ -73,7 +77,8 @@ Column {
             onActivated: i => root.selection = i
         }
         ModuleActions { id: actions; operation: root.operation; title: Names.module(root.operation, root.operation); saveEnabled: root.saveEnabled; onSavePresetRequested: (operation, label) => root.savePresetRequested(operation, label) }
-        EyeToggle { id: toggle; checked: root.moduleOn; text: Names.module(root.operation, root.operation); onClicked: engine.setModuleEnabled(root.operation, !root.moduleOn) }
+            EyeToggle { id: toggle; checked: root.moduleOn; text: Names.module(root.operation, root.operation); onClicked: engine.setModuleEnabled(root.operation, !root.moduleOn) }
+        }
     }
     Text {
         x: Theme.s3; width: parent.width - Theme.s3 * 2

@@ -249,6 +249,49 @@ Item {
         onAccepted: root.watermarkImage = backend.localFile(selectedFile.toString())
     }
 
+    // Label above the control, hint underneath. A side caption in this
+    // inspector leaves the field too narrow to read.
+    component Field: Column {
+        id: field
+        property string label: ""
+        property string hint: ""
+        property color hintColor: Theme.textMuted
+        default property alias controls: body.data
+        width: parent ? parent.width : implicitWidth
+        spacing: Theme.s2
+        topPadding: Theme.s2
+        bottomPadding: Theme.s1
+        leftPadding: Theme.s3
+        rightPadding: Theme.s3
+        readonly property int innerWidth: Math.max(0, width - leftPadding - rightPadding)
+        Text {
+            width: field.innerWidth
+            visible: field.label !== ""
+            text: field.label
+            textFormat: Text.PlainText
+            elide: Text.ElideRight
+            font.family: Theme.fontFamily
+            font.pixelSize: Theme.fsLabel
+            font.weight: Theme.wHeading
+            color: Theme.textSecondary
+        }
+        Column {
+            id: body
+            width: field.innerWidth
+            spacing: Theme.s2
+        }
+        Text {
+            width: field.innerWidth
+            visible: field.hint !== ""
+            text: field.hint
+            textFormat: Text.PlainText
+            wrapMode: Text.WordWrap
+            font.family: Theme.fontFamily
+            font.pixelSize: Theme.fsLabel
+            color: field.hintColor
+        }
+    }
+
     Column {
         anchors.fill: parent
         spacing: 0
@@ -270,8 +313,8 @@ Item {
                     width: leftScroll.availableWidth
                     spacing: 0
                     SectionHeader { title: qsTr("Source"); helpSection: "output" }
-                    SourceRow { iconName: "square-check-big"; name: qsTr("Selected photos"); count: backend.selectedCount || (backend.currentId ? 1 : 0); current: root.sourceMode === "selection"; onClicked: root.sourceMode = "selection" }
-                    SourceRow { iconName: "images"; name: qsTr("All photos shown"); count: assets.count; current: root.sourceMode === "shown"; onClicked: root.sourceMode = "shown" }
+                    SourceRow { iconName: "square-check-big"; name: qsTr("Selected photos"); count: backend.selectedCount || (backend.currentId ? 1 : 0); current: root.sourceMode === "selection"; rowHeight: Theme.hRow + Theme.s2; onClicked: root.sourceMode = "selection" }
+                    SourceRow { iconName: "images"; name: qsTr("All photos shown"); count: assets.count; current: root.sourceMode === "shown"; rowHeight: Theme.hRow + Theme.s2; onClicked: root.sourceMode = "shown" }
                     Item { width: 1; height: Theme.s3 }
                     SectionHeader { title: qsTr("Export presets"); helpSection: "output" }
                     Repeater {
@@ -281,29 +324,43 @@ Item {
                             required property var modelData
                             objectName: "exportPreset_" + modelData.id
                             iconName: "file"; name: modelData.name
+                            rowHeight: Theme.hRow + Theme.s2
                             current: root.presetIndex === index && root.presetMatches
                             onClicked: root.applyPreset(index)
                         }
                     }
                     Text {
-                        x: Theme.s3; width: parent.width - Theme.s3 * 2
+                        width: parent.width
+                        leftPadding: Theme.s3
+                        rightPadding: Theme.s3
+                        topPadding: Theme.s2
                         wrapMode: Text.WordWrap
                         text: root.presetMatches ? root.presets[root.presetIndex].detail : qsTr("Custom export settings")
                         font.family: Theme.fontFamily; font.pixelSize: Theme.fsLabel; color: Theme.textMuted
                     }
                     Item { width: 1; height: Theme.s3 }
-                    SavedSettings {
-                        x: Theme.s3; width: parent.width - Theme.s3 * 2
-                        caption: qsTr("Export & print templates")
-                        entries: backend.outputTemplates
-                        onChosen: values => root.applyTemplate(values)
-                        onSaveRequested: name => backend.saveWorkflowPreset("output", name, root.templateState())
-                        onRemoveRequested: name => backend.deleteWorkflowPreset("output", name)
+                    Item {
+                        width: parent.width
+                        height: templates.implicitHeight
+                        SavedSettings {
+                            id: templates
+                            x: Theme.s3
+                            width: parent.width - Theme.s3 * 2
+                            caption: qsTr("Export & print templates")
+                            entries: backend.outputTemplates
+                            onChosen: values => root.applyTemplate(values)
+                            onSaveRequested: name => backend.saveWorkflowPreset("output", name, root.templateState())
+                            onRemoveRequested: name => backend.deleteWorkflowPreset("output", name)
+                        }
                     }
                     Item { width: 1; height: Theme.s3 }
                     SectionHeader { title: qsTr("PDF layouts"); helpSection: "print" }
                     Text {
-                        x: Theme.s3; width: parent.width - Theme.s3 * 2; wrapMode: Text.WordWrap
+                        width: parent.width
+                        leftPadding: Theme.s3
+                        rightPadding: Theme.s3
+                        bottomPadding: Theme.s3
+                        wrapMode: Text.WordWrap
                         text: root.lastSheet !== "" ? qsTr("Last PDF: %1").arg(root.lastSheet.split("/").pop()) : qsTr("PDF layouts of the source above; set up on the right.")
                         font.family: Theme.fontFamily; font.pixelSize: Theme.fsLabel; color: Theme.textMuted
                     }
@@ -378,119 +435,103 @@ Item {
                     clip: true
                   Column {
                     width: settingsScroll.availableWidth
-                    spacing: 0
+                    spacing: Theme.s2
                     InspectorGroup {
                         title: qsTr("Export settings"); helpSection: "output"
-                        Item {
-                            width: parent.width; height: Theme.hRow + Theme.s1
-                            Text {
-                                anchors.left: parent.left; anchors.leftMargin: Theme.s3; width: 104
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: qsTr("Format")
-                                font.family: Theme.fontFamily; font.pixelSize: Theme.fsLabel; color: Theme.textMuted
-                            }
+                        Field {
+                            label: qsTr("Format")
                             ComboField {
-                                anchors.left: parent.left; anchors.leftMargin: Theme.s3 + 104
-                                anchors.right: parent.right; anchors.rightMargin: Theme.s3
-                                anchors.verticalCenter: parent.verticalCenter
+                                width: parent.width
                                 model: root.formats.map(f => f.label)
                                 tipTitle: qsTr("Format"); tip: qsTr("The file type written; JPEG for sharing, TIFF for archive, PSD for a layered editor.")
                                 currentIndex: Math.max(0, root.formats.findIndex(f => f.id === root.format))
                                 onActivated: i => root.format = root.formats[i].id
                             }
-                        }
-                        Item {
-                            visible: root.formatInfo.bpp
-                            width: parent.width; height: visible ? Theme.hRow + Theme.s1 : 0
-                            Text {
-                                anchors.left: parent.left; anchors.leftMargin: Theme.s3; width: 104
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: qsTr("Bit depth")
-                                font.family: Theme.fontFamily; font.pixelSize: Theme.fsLabel; color: Theme.textMuted
-                            }
                             SegmentedControl {
-                                anchors.left: parent.left; anchors.leftMargin: Theme.s3 + 104
-                                anchors.verticalCenter: parent.verticalCenter
+                                visible: root.formatInfo.bpp
+                                width: parent.width
+                                fill: true
                                 labels: ["8 bit", "16 bit"]
                                 tips: [qsTr("Standard depth; half the size."), qsTr("Keeps the engine's full precision for further editing.")]
                                 currentIndex: root.bpp === 16 ? 1 : 0
                                 onActivated: i => root.bpp = i === 1 ? 16 : 8
                             }
                         }
-                        Row {
-                            x: Theme.s3; width: parent.width - Theme.s3 * 2; spacing: Theme.s2
+                        Field {
+                            label: qsTr("Print PPI")
+                            hint: root.ppi === 0 ? qsTr("No print-resolution override. Pixel size and JPEG quality are set separately.") : qsTr("%1 pixels per printed inch. This tag does not resize the image.").arg(root.ppi)
+                            Row {
+                                width: parent.width
+                                spacing: Theme.s2
+                                ComboField {
+                                    id: ppiChoice
+                                    objectName: "outputPpiChoice"
+                                    width: parent.width - (ppiNumber.visible ? ppiNumber.width + parent.spacing : 0)
+                                    model: [qsTr("No override"), "150 ppi", "240 ppi", "300 ppi", "360 ppi", "600 ppi", qsTr("Custom…")]
+                                    currentIndex: root.customPpi || root.ppiValues.indexOf(root.ppi) < 0 ? root.ppiValues.length : root.ppiValues.indexOf(root.ppi)
+                                    tipTitle: qsTr("Print PPI")
+                                    tip: qsTr("Sets the print-size tag without changing pixel dimensions or JPEG quality. No override keeps the resolution supplied by the source or encoder.")
+                                    onActivated: i => {
+                                        root.customPpi = i === root.ppiValues.length
+                                        root.ppi = root.customPpi ? (root.ppi > 0 ? root.ppi : 300) : root.ppiValues[i]
+                                    }
+                                }
+                                ValueField {
+                                    id: ppiNumber
+                                    objectName: "outputPpiNumber"
+                                    visible: ppiChoice.currentIndex === root.ppiValues.length
+                                    from: 1; to: 2400; decimals: 0; snap: 1; step: 1
+                                    label: qsTr("Custom print PPI")
+                                    onEdited: v => root.ppi = v
+                                }
+                                Binding { target: ppiNumber; property: "value"; value: root.ppi }
+                            }
+                        }
+                        Field {
+                            label: qsTr("Colour profile")
+                            hint: root.outputProfileError
+                            hintColor: Theme.warning
                             ComboField {
-                                id: ppiChoice
-                                objectName: "outputPpiChoice"
-                                width: parent.width - (ppiNumber.visible ? ppiNumber.width + parent.spacing : 0)
-                                caption: qsTr("Print PPI")
-                                model: [qsTr("No override"), "150 ppi", "240 ppi", "300 ppi", "360 ppi", "600 ppi", qsTr("Custom…")]
-                                currentIndex: root.customPpi || root.ppiValues.indexOf(root.ppi) < 0 ? root.ppiValues.length : root.ppiValues.indexOf(root.ppi)
-                                tip: qsTr("Sets the print-size tag without changing pixel dimensions or JPEG quality. No override keeps the resolution supplied by the source or encoder.")
-                                onActivated: i => {
-                                    root.customPpi = i === root.ppiValues.length
-                                    root.ppi = root.customPpi ? (root.ppi > 0 ? root.ppi : 300) : root.ppiValues[i]
+                                width: parent.width
+                                model: [qsTr("sRGB"), qsTr("RGB (1998)"), qsTr("Linear ProPhoto RGB (16-bit files)"), qsTr("Custom RGB ICC…")]
+                                tipTitle: qsTr("Colour profile"); tip: qsTr("The colour space the file is written in and tagged with; sRGB for the web and most screens.")
+                                currentIndex: root.outputProfile
+                                onActivated: i => { root.outputProfile = i; if (i === 3 && root.outputIcc === "") outputIccDialog.open() }
+                            }
+                            Row {
+                                visible: root.outputProfile === 3
+                                width: parent.width
+                                spacing: Theme.s2
+                                Text {
+                                    width: parent.width - profileButton.width - parent.spacing
+                                    height: Theme.hControl
+                                    text: root.outputIcc ? engine.proofProfileNameOf(root.outputIcc) : qsTr("Choose a profile…")
+                                    elide: Text.ElideMiddle
+                                    verticalAlignment: Text.AlignVCenter
+                                    font.family: Theme.fontFamily; font.pixelSize: Theme.fsLabel; color: Theme.textSecondary
+                                }
+                                IconButton {
+                                    id: profileButton
+                                    iconName: "folder-open"
+                                    text: qsTr("Choose output ICC profile")
+                                    tip: qsTr("Any RGB profile file, such as a lab's printing profile.")
+                                    onClicked: outputIccDialog.open()
                                 }
                             }
-                            ValueField {
-                                id: ppiNumber
-                                objectName: "outputPpiNumber"
-                                visible: ppiChoice.currentIndex === root.ppiValues.length
-                                width: 76; from: 1; to: 2400; decimals: 0; snap: 1; step: 1
-                                label: qsTr("Custom print PPI")
-                                onEdited: v => root.ppi = v
-                            }
-                            Binding { target: ppiNumber; property: "value"; value: root.ppi }
-                        }
-                        Text {
-                            x: Theme.s3; width: parent.width - Theme.s3 * 2; wrapMode: Text.WordWrap
-                            text: root.ppi === 0 ? qsTr("No print-resolution override. Pixel size and JPEG quality are set separately.") : qsTr("%1 pixels per printed inch. This tag does not resize the image.").arg(root.ppi)
-                            font.family: Theme.fontFamily; font.pixelSize: Theme.fsLabel; color: Theme.textMuted
-                        }
-                        ComboField {
-                            x: Theme.s3; width: parent.width - Theme.s3 * 2
-                            model: [qsTr("sRGB"), qsTr("RGB (1998)"), qsTr("Linear ProPhoto RGB (16-bit files)"), qsTr("Custom RGB ICC…")]
-                            tipTitle: qsTr("Colour profile"); tip: qsTr("The colour space the file is written in and tagged with; sRGB for the web and most screens.")
-                            currentIndex: root.outputProfile
-                            onActivated: i => { root.outputProfile = i; if (i === 3 && root.outputIcc === "") outputIccDialog.open() }
-                        }
-                        Row {
-                            visible: root.outputProfile === 3
-                            x: Theme.s3; width: parent.width - Theme.s3 * 2; spacing: Theme.s2
-                            Text {
-                                width: parent.width - Theme.hControl - Theme.s2; height: Theme.hControl
-                                text: root.outputIcc ? engine.proofProfileNameOf(root.outputIcc) : qsTr("Choose a profile…")
-                                elide: Text.ElideMiddle; verticalAlignment: Text.AlignVCenter
-                                font.family: Theme.fontFamily; font.pixelSize: Theme.fsLabel; color: Theme.textSecondary
-                            }
-                            IconButton { iconName: "folder-open"; text: qsTr("Choose output ICC profile"); tip: qsTr("Any RGB profile file, such as a lab's printing profile."); onClicked: outputIccDialog.open() }
-                        }
-                        ComboField {
-                            x: Theme.s3; width: parent.width - Theme.s3 * 2
-                            model: [qsTr("Perceptual"), qsTr("Relative colorimetric"), qsTr("Saturation"), qsTr("Absolute colorimetric")]
-                            tipTitle: qsTr("Rendering intent"); tip: qsTr("How colours outside the profile are brought in; perceptual for photos.")
-                            currentIndex: root.outputIntent
-                            visible: root.outputProfile === 3
-                            onActivated: i => root.outputIntent = i
-                        }
-                        Text {
-                            visible: root.outputProfileError !== ""
-                            x: Theme.s3; width: parent.width - Theme.s3 * 2; wrapMode: Text.WordWrap
-                            text: root.outputProfileError
-                            font.family: Theme.fontFamily; font.pixelSize: Theme.fsLabel; color: Theme.warning
-                        }
-                        InspectorRow { label: qsTr("Available"); value: root.formats.map(f => f.label).join(", ") }
-                        Item {
-                            width: parent.width; height: Theme.hControl + Theme.s1
-                            Text {
-                                anchors.left: parent.left; anchors.leftMargin: Theme.s3; anchors.verticalCenter: parent.verticalCenter
-                                text: qsTr("Resize by")
-                                font.family: Theme.fontFamily; font.pixelSize: Theme.fsLabel; color: Theme.textMuted
-                            }
                             ComboField {
-                                anchors.left: parent.left; anchors.leftMargin: Theme.s3 + 104
-                                anchors.right: parent.right; anchors.rightMargin: Theme.s3
-                                anchors.verticalCenter: parent.verticalCenter
+                                width: parent.width
+                                visible: root.outputProfile === 3
+                                model: [qsTr("Perceptual"), qsTr("Relative colorimetric"), qsTr("Saturation"), qsTr("Absolute colorimetric")]
+                                tipTitle: qsTr("Rendering intent"); tip: qsTr("How colours outside the profile are brought in; perceptual for photos.")
+                                currentIndex: root.outputIntent
+                                onActivated: i => root.outputIntent = i
+                            }
+                        }
+                        Field {
+                            label: qsTr("Resize by")
+                            hint: root.resizeMode === "none" ? qsTr("Full size, as developed") : ""
+                            ComboField {
+                                width: parent.width
                                 model: [qsTr("Long edge"), qsTr("Short edge"), qsTr("Width"), qsTr("Height"), qsTr("Megapixels"), qsTr("Percent"), qsTr("No resize")]
                                 tipTitle: qsTr("Resize"); tip: qsTr("Which measure the size below applies to; photos are never enlarged.")
                                 currentIndex: Math.max(0, root.resizeModes.indexOf(root.resizeMode))
@@ -502,117 +543,147 @@ Item {
                                 }
                             }
                         }
-                        SliderField {
+                        Field {
                             visible: root.resizeMode !== "none"
-                            x: Theme.s3; width: parent.width - Theme.s3 * 2
-                            label: root.resizeMode === "megapixels" ? qsTr("Megapixels") : root.resizeMode === "percent" ? qsTr("Percent") : qsTr("Pixels")
-                            tip: qsTr("The size limit; 0 means no limit.")
-                            from: 0; to: root.resizeMode === "megapixels" ? 200 : root.resizeMode === "percent" ? 100 : 8000
-                            stepSize: root.resizeMode === "megapixels" ? 1 : root.resizeMode === "percent" ? 5 : 100; decimals: 0
-                            value: root.maxEdge
-                            onEdited: v => root.maxEdge = v
-                            onEditingFinished: v => root.maxEdge = v
-                        }
-                        Text {
-                            x: Theme.s3
-                            text: root.resizeMode === "none" ? qsTr("Full size, as developed")
-                                : root.maxEdge === 0 ? qsTr("0 = full size")
+                            hint: root.maxEdge === 0 ? qsTr("0 = full size")
                                 : root.resizeMode === "long" ? qsTr("%1 px on the long edge").arg(root.maxEdge)
                                 : root.resizeMode === "short" ? qsTr("%1 px on the short edge").arg(root.maxEdge)
                                 : root.resizeMode === "width" ? qsTr("%1 px wide").arg(root.maxEdge)
                                 : root.resizeMode === "height" ? qsTr("%1 px tall").arg(root.maxEdge)
                                 : root.resizeMode === "megapixels" ? qsTr("At most %1 megapixels, never upsized").arg(root.maxEdge)
                                 : qsTr("%1 % of the developed size").arg(root.maxEdge)
-                            font.family: Theme.fontFamily; font.pixelSize: Theme.fsLabel; color: Theme.textMuted
+                            SliderField {
+                                width: parent.width
+                                stacked: true
+                                label: root.resizeMode === "megapixels" ? qsTr("Megapixels") : root.resizeMode === "percent" ? qsTr("Percent") : qsTr("Pixels")
+                                tip: qsTr("The size limit; 0 means no limit.")
+                                from: 0; to: root.resizeMode === "megapixels" ? 200 : root.resizeMode === "percent" ? 100 : 8000
+                                stepSize: root.resizeMode === "megapixels" ? 1 : root.resizeMode === "percent" ? 5 : 100; decimals: 0
+                                value: root.maxEdge
+                                onEdited: v => root.maxEdge = v
+                                onEditingFinished: v => root.maxEdge = v
+                            }
                         }
-                        SliderField {
+                        Field {
                             visible: root.formatInfo.quality
-                            x: Theme.s3; width: parent.width - Theme.s3 * 2
-                            label: qsTr("Quality"); from: 1; to: 100; stepSize: 1; decimals: 0
-                            tip: qsTr("Compression quality: higher is a larger, cleaner file; 85 to 92 suits most uses.")
-                            value: root.quality
-                            onEdited: v => root.quality = v
-                            onEditingFinished: v => root.quality = v
+                            SliderField {
+                                width: parent.width
+                                stacked: true
+                                label: qsTr("Quality"); from: 1; to: 100; stepSize: 1; decimals: 0
+                                tip: qsTr("Compression quality: higher is a larger, cleaner file; 85 to 92 suits most uses.")
+                                value: root.quality
+                                onEdited: v => root.quality = v
+                                onEditingFinished: v => root.quality = v
+                            }
                         }
                     }
                     InspectorGroup {
                         title: qsTr("Destination"); helpSection: "output"
-                        InspectorRow { label: qsTr("Folder"); value: root.folder; hideEmpty: false }
-                        Row {
-                            x: Theme.s3; spacing: Theme.s2
+                        Field {
+                            label: qsTr("Folder")
+                            Text {
+                                id: folderPath
+                                width: parent.width
+                                height: Theme.hControl
+                                text: root.folder
+                                textFormat: Text.PlainText
+                                elide: Text.ElideMiddle
+                                verticalAlignment: Text.AlignVCenter
+                                font.family: Theme.fontFamily; font.pixelSize: Theme.fsControl
+                                color: root.folder === "" ? Theme.textMuted : Theme.textPrimary
+                                HoverHandler { id: folderHover }
+                                Tooltip { text: qsTr("Folder"); description: folderPath.text; visible: folderHover.hovered && folderPath.truncated }
+                            }
                             ToolButton { iconName: "folder-open"; text: qsTr("Choose folder…"); showLabel: true; tip: qsTr("Where the files are written."); onClicked: folderDialog.openFor(root.folder) }
                         }
-                        SearchField {
-                            x: Theme.s3; width: parent.width - Theme.s3 * 2
-                            placeholder: qsTr("Filename pattern, e.g. {date}-{name}{suffix}")
-                            tip: qsTr("How files are named: {name} the original name, {date} the capture date, {seq} a counter, {suffix} the suffix below; the line under it shows the first result.")
-                            live: false
-                            text: root.namePattern
-                            onAccepted: t => root.namePattern = t
+                        Field {
+                            label: qsTr("Filename pattern")
+                            hint: qsTr("Tokens: {name} {seq} {date} {time} {camera} {rating} {folder} {tag} {suffix}. Empty keeps the original name plus the preset's suffix.")
+                            SearchField {
+                                width: parent.width
+                                glyph: "type"
+                                placeholder: qsTr("{date}-{name}{suffix}")
+                                tip: qsTr("How files are named: {name} the original name, {date} the capture date, {seq} a counter, {suffix} the preset suffix. The line under it shows the first result.")
+                                live: false
+                                text: root.namePattern
+                                onAccepted: t => root.namePattern = t
+                            }
+                            Text {
+                                id: nameLine
+                                width: parent.width
+                                text: root.namePreview + "." + root.formatInfo.ext
+                                textFormat: Text.PlainText
+                                elide: Text.ElideMiddle
+                                font.family: Theme.monoFamily; font.pixelSize: Theme.fsLabel
+                                color: Theme.textPrimary
+                                HoverHandler { id: nameHover }
+                                Tooltip { text: qsTr("Filename"); description: nameLine.text; visible: nameHover.hovered && nameLine.truncated }
+                            }
                         }
-                        InspectorRow { label: qsTr("Filename"); value: root.namePreview + "." + root.formatInfo.ext; mono: true; hideEmpty: false }
-                        Text {
-                            x: Theme.s3; width: parent.width - Theme.s3 * 2; wrapMode: Text.WordWrap
-                            text: qsTr("Tokens: {name} {seq} {date} {time} {camera} {rating} {folder} {tag} {suffix}. Empty keeps the original name plus the preset's suffix.")
-                            font.family: Theme.fontFamily; font.pixelSize: Theme.fsLabel; color: Theme.textMuted
-                        }
-                        Row { x: Theme.s3; height: Theme.hRow; Toggle { anchors.verticalCenter: parent.verticalCenter; label: qsTr("Copy the original file alongside"); tip: qsTr("Puts the untouched RAW or original next to the export."); checkable: false; checked: root.copyOriginal; onClicked: root.copyOriginal = !root.copyOriginal } }
-                        Row { x: Theme.s3; height: Theme.hRow; Toggle { anchors.verticalCenter: parent.verticalCenter; label: qsTr("Copy its XMP sidecar too"); tip: qsTr("The original's metadata file goes with it."); checkable: false; checked: root.copySidecar; enabled: root.copyOriginal; onClicked: root.copySidecar = !root.copySidecar } }
-                        Text {
-                            x: Theme.s3; width: parent.width - Theme.s3 * 2; wrapMode: Text.WordWrap
-                            text: qsTr("Existing files are never overwritten; a counter is added.")
-                            font.family: Theme.fontFamily; font.pixelSize: Theme.fsLabel; color: Theme.textMuted
+                        Column {
+                            width: parent.width
+                            spacing: Theme.s2
+                            topPadding: Theme.s2
+                            bottomPadding: Theme.s2
+                            leftPadding: Theme.s3
+                            rightPadding: Theme.s3
+                            Toggle {
+                                width: parent.width - parent.leftPadding - parent.rightPadding
+                                height: Theme.hRow + Theme.s2
+                                label: qsTr("Copy the original file alongside")
+                                tip: qsTr("Puts the untouched RAW or original next to the export.")
+                                checkable: false
+                                checked: root.copyOriginal
+                                onClicked: root.copyOriginal = !root.copyOriginal
+                            }
+                            Toggle {
+                                width: parent.width - parent.leftPadding - parent.rightPadding
+                                height: Theme.hRow + Theme.s2
+                                label: qsTr("Copy its XMP sidecar too")
+                                tip: qsTr("The original's metadata file goes with it.")
+                                checkable: false
+                                checked: root.copySidecar
+                                enabled: root.copyOriginal
+                                onClicked: root.copySidecar = !root.copySidecar
+                            }
+                            Text {
+                                width: parent.width - parent.leftPadding - parent.rightPadding
+                                wrapMode: Text.WordWrap
+                                text: qsTr("Existing files are never overwritten; a counter is added.")
+                                font.family: Theme.fontFamily; font.pixelSize: Theme.fsLabel; color: Theme.textMuted
+                            }
                         }
                     }
                     InspectorGroup {
                         title: qsTr("Finishing"); helpSection: "output"
-                        Item {
-                            width: parent.width; height: Theme.hRow + Theme.s1
-                            Text {
-                                anchors.left: parent.left; anchors.leftMargin: Theme.s3; width: 104
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: qsTr("Sharpen for")
-                                font.family: Theme.fontFamily; font.pixelSize: Theme.fsLabel; color: Theme.textMuted
-                            }
+                        Field {
+                            label: qsTr("Sharpen for")
                             SegmentedControl {
-                                anchors.left: parent.left; anchors.leftMargin: Theme.s3 + 104
-                                anchors.verticalCenter: parent.verticalCenter
+                                width: parent.width
+                                fill: true
                                 labels: [qsTr("Off"), qsTr("Screen"), qsTr("Print")]
                                 tips: [qsTr("No output sharpening."), qsTr("A fine radius suited to viewing on a display."), qsTr("A wider radius that survives the softening of ink on paper.")]
                                 currentIndex: root.sharpen
                                 onActivated: i => root.sharpen = i
                             }
                         }
-                        Item {
+                        Field {
                             visible: root.sharpen > 0
-                            width: parent.width; height: visible ? Theme.hRow + Theme.s1 : 0
-                            Text {
-                                anchors.left: parent.left; anchors.leftMargin: Theme.s3; width: 104
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: qsTr("Amount")
-                                font.family: Theme.fontFamily; font.pixelSize: Theme.fsLabel; color: Theme.textMuted
-                            }
+                            label: qsTr("Amount")
                             SegmentedControl {
-                                anchors.left: parent.left; anchors.leftMargin: Theme.s3 + 104
-                                anchors.verticalCenter: parent.verticalCenter
+                                width: parent.width
+                                fill: true
                                 labels: [qsTr("Low"), qsTr("Standard"), qsTr("High")]
                                 tip: qsTr("How strong the output sharpening is.")
                                 currentIndex: root.sharpenAmount
                                 onActivated: i => root.sharpenAmount = i
                             }
                         }
-                        Item {
-                            width: parent.width; height: Theme.hRow + Theme.s1
-                            Text {
-                                anchors.left: parent.left; anchors.leftMargin: Theme.s3; width: 104
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: qsTr("Watermark")
-                                font.family: Theme.fontFamily; font.pixelSize: Theme.fsLabel; color: Theme.textMuted
-                            }
+                        Field {
+                            label: qsTr("Watermark")
                             SearchField {
-                                anchors.left: parent.left; anchors.leftMargin: Theme.s3 + 104
-                                anchors.right: parent.right; anchors.rightMargin: Theme.s3
-                                anchors.verticalCenter: parent.verticalCenter
+                                width: parent.width
+                                glyph: "type"
                                 placeholder: qsTr("Text, e.g. © Your Name")
                                 tip: qsTr("Text drawn onto every export at the position, size and opacity below; blank for none.")
                                 text: root.watermarkText
@@ -620,206 +691,194 @@ Item {
                                 onCleared: root.watermarkText = ""
                             }
                         }
-                        Item {
-                            width: parent.width; height: Theme.hRow + Theme.s1
-                            Text {
-                                anchors.left: parent.left; anchors.leftMargin: Theme.s3; width: 104
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: qsTr("Image")
-                                font.family: Theme.fontFamily; font.pixelSize: Theme.fsLabel; color: Theme.textMuted
-                            }
+                        Field {
+                            label: qsTr("Image")
                             Row {
-                                anchors.left: parent.left; anchors.leftMargin: Theme.s3 + 104
-                                anchors.right: parent.right; anchors.rightMargin: Theme.s3
-                                anchors.verticalCenter: parent.verticalCenter
-                                spacing: Theme.s1
-                                ToolButton { iconName: "image"; text: root.watermarkImage === "" ? qsTr("Choose…") : root.watermarkImage.split("/").pop(); showLabel: true; tip: qsTr("A PNG logo, with transparency, drawn onto every export."); onClicked: markDialog.open() }
-                                IconButton { visible: root.watermarkImage !== ""; iconName: "x"; text: qsTr("Remove the watermark image"); tip: qsTr("Exports go out without the logo."); onClicked: root.watermarkImage = "" }
+                                width: parent.width
+                                spacing: Theme.s2
+                                ToolButton {
+                                    width: Math.min(implicitWidth, parent.width - (markClear.visible ? markClear.width + parent.spacing : 0))
+                                    iconName: "image"
+                                    text: root.watermarkImage === "" ? qsTr("Choose…") : root.watermarkImage.split("/").pop()
+                                    showLabel: true
+                                    tip: qsTr("A PNG logo, with transparency, drawn onto every export.")
+                                    onClicked: markDialog.open()
+                                }
+                                IconButton {
+                                    id: markClear
+                                    visible: root.watermarkImage !== ""
+                                    width: visible ? Theme.szIconHit : 0
+                                    iconName: "x"
+                                    text: qsTr("Remove the watermark image")
+                                    tip: qsTr("Exports go out without the logo.")
+                                    onClicked: root.watermarkImage = ""
+                                }
                             }
                         }
-                        Item {
-                            width: parent.width; height: Theme.hRow + Theme.s1
-                            Text {
-                                anchors.left: parent.left; anchors.leftMargin: Theme.s3; width: 104
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: qsTr("Position")
-                                font.family: Theme.fontFamily; font.pixelSize: Theme.fsLabel; color: Theme.textMuted
-                            }
+                        Field {
+                            label: qsTr("Position")
                             ComboField {
-                                anchors.left: parent.left; anchors.leftMargin: Theme.s3 + 104
-                                anchors.right: parent.right; anchors.rightMargin: Theme.s3
-                                anchors.verticalCenter: parent.verticalCenter
+                                width: parent.width
                                 model: [qsTr("Top left"), qsTr("Top"), qsTr("Top right"), qsTr("Left"), qsTr("Centre"), qsTr("Right"), qsTr("Bottom left"), qsTr("Bottom"), qsTr("Bottom right")]
                                 tipTitle: qsTr("Position"); tip: qsTr("Where on the picture the watermark sits.")
                                 currentIndex: root.watermarkAnchor
                                 onActivated: i => root.watermarkAnchor = i
                             }
                         }
-                        SliderField {
-                            x: Theme.s3; width: parent.width - Theme.s3 * 2
-                            label: qsTr("Size %"); from: 1; to: 12; stepSize: 0.5; decimals: 1
-                            tip: qsTr("Height of the watermark as a share of the picture's long edge.")
-                            value: root.watermarkSize
-                            onEdited: v => root.watermarkSize = v
-                            onEditingFinished: v => root.watermarkSize = v
+                        Field {
+                            SliderField {
+                                width: parent.width
+                                stacked: true
+                                label: qsTr("Size %"); from: 1; to: 12; stepSize: 0.5; decimals: 1
+                                tip: qsTr("Height of the watermark as a share of the picture's long edge.")
+                                value: root.watermarkSize
+                                onEdited: v => root.watermarkSize = v
+                                onEditingFinished: v => root.watermarkSize = v
+                            }
                         }
-                        SliderField {
-                            x: Theme.s3; width: parent.width - Theme.s3 * 2
-                            label: qsTr("Opacity"); from: 0.05; to: 1; stepSize: 0.05; decimals: 2
-                            tip: qsTr("How solid the watermark is drawn.")
-                            value: root.watermarkOpacity
-                            onEdited: v => root.watermarkOpacity = v
-                            onEditingFinished: v => root.watermarkOpacity = v
-                        }
-                        Text {
-                            x: Theme.s3; width: parent.width - Theme.s3 * 2; wrapMode: Text.WordWrap
-                            text: root.finishingActive && !root.finishingWritable
+                        Field {
+                            hint: root.finishingActive && !root.finishingWritable
                                 ? qsTr("%1 files cannot be finished: sharpening and the watermark are skipped for this format.").arg(root.formatInfo.label || root.format)
                                 : qsTr("Applied to the exported file after the engine renders it; the metadata stays. The preview shows the watermark where it will land.")
-                            font.family: Theme.fontFamily; font.pixelSize: Theme.fsLabel
-                            color: root.finishingActive && !root.finishingWritable ? Theme.warning : Theme.textMuted
+                            hintColor: root.finishingActive && !root.finishingWritable ? Theme.warning : Theme.textMuted
+                            SliderField {
+                                width: parent.width
+                                stacked: true
+                                label: qsTr("Opacity"); from: 0.05; to: 1; stepSize: 0.05; decimals: 2
+                                tip: qsTr("How solid the watermark is drawn.")
+                                value: root.watermarkOpacity
+                                onEdited: v => root.watermarkOpacity = v
+                                onEditingFinished: v => root.watermarkOpacity = v
+                            }
                         }
                     }
                     InspectorGroup {
                         title: qsTr("Metadata"); helpSection: "output"
                         Column {
-                            x: Theme.s3; width: parent.width - Theme.s3 * 2
-                            spacing: Theme.s1
-                            Toggle { label: qsTr("Camera EXIF"); tip: qsTr("Camera, lens and exposure details travel with the file."); checked: root.metaExif; onClicked: root.metaExif = !root.metaExif }
-                            Toggle { label: qsTr("Location (GPS)"); tip: qsTr("Where the photo was taken travels with the file; off keeps that private."); checked: root.metaLocation; onClicked: root.metaLocation = !root.metaLocation }
-                            Toggle { label: qsTr("Keywords"); tip: qsTr("The catalog's keywords are written into the file."); checked: root.metaKeywords; onClicked: root.metaKeywords = !root.metaKeywords }
-                            Toggle { label: qsTr("Develop history (XMP)"); tip: qsTr("The full edit recipe goes into the file's XMP, so OmaRAW can read it back."); checked: root.metaHistory; onClicked: root.metaHistory = !root.metaHistory }
-                        }
-                        Text {
-                            x: Theme.s3; width: parent.width - Theme.s3 * 2; wrapMode: Text.WordWrap
-                            text: qsTr("Location is off by default so a shared file does not carry where it was taken. The Software tag reads OmaRAW.")
-                            font.family: Theme.fontFamily; font.pixelSize: Theme.fsLabel; color: Theme.textMuted
+                            width: parent.width
+                            spacing: Theme.s2
+                            topPadding: Theme.s2
+                            bottomPadding: Theme.s1
+                            leftPadding: Theme.s3
+                            rightPadding: Theme.s3
+                            Toggle { width: parent.width - parent.leftPadding - parent.rightPadding; height: Theme.hRow + Theme.s2; label: qsTr("Camera EXIF"); tip: qsTr("Camera, lens and exposure details travel with the file."); checked: root.metaExif; onClicked: root.metaExif = !root.metaExif }
+                            Toggle { width: parent.width - parent.leftPadding - parent.rightPadding; height: Theme.hRow + Theme.s2; label: qsTr("Location (GPS)"); tip: qsTr("Where the photo was taken travels with the file; off keeps that private."); checked: root.metaLocation; onClicked: root.metaLocation = !root.metaLocation }
+                            Toggle { width: parent.width - parent.leftPadding - parent.rightPadding; height: Theme.hRow + Theme.s2; label: qsTr("Keywords"); tip: qsTr("The catalog's keywords are written into the file."); checked: root.metaKeywords; onClicked: root.metaKeywords = !root.metaKeywords }
+                            Toggle { width: parent.width - parent.leftPadding - parent.rightPadding; height: Theme.hRow + Theme.s2; label: qsTr("Develop history (XMP)"); tip: qsTr("The full edit recipe goes into the file's XMP, so OmaRAW can read it back."); checked: root.metaHistory; onClicked: root.metaHistory = !root.metaHistory }
+                            Text {
+                                width: parent.width - parent.leftPadding - parent.rightPadding
+                                wrapMode: Text.WordWrap
+                                text: qsTr("Location is off by default so a shared file does not carry where it was taken. The Software tag reads OmaRAW.")
+                                font.family: Theme.fontFamily; font.pixelSize: Theme.fsLabel; color: Theme.textMuted
+                            }
                         }
                     }
                     InspectorGroup {
                         title: qsTr("Print & contact sheet"); helpSection: "print"
-                        Item {
-                            width: parent.width; height: Theme.hRow + Theme.s1
-                            Text {
-                                anchors.left: parent.left; anchors.leftMargin: Theme.s3; width: 104
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: qsTr("Paper")
-                                font.family: Theme.fontFamily; font.pixelSize: Theme.fsLabel; color: Theme.textMuted
-                            }
+                        Field {
+                            label: qsTr("Paper")
                             ComboField {
-                                anchors.left: parent.left; anchors.leftMargin: Theme.s3 + 104
-                                anchors.right: parent.right; anchors.rightMargin: Theme.s3
-                                anchors.verticalCenter: parent.verticalCenter
+                                width: parent.width
                                 model: backend.sheetPapers()
                                 tipTitle: qsTr("Paper"); tip: qsTr("The page size of the PDF.")
                                 currentIndex: Math.max(0, backend.sheetPapers().indexOf(root.sheetPaper))
                                 onActivated: i => root.sheetPaper = backend.sheetPapers()[i]
                             }
                         }
-                        Item {
-                            width: parent.width; height: Theme.hRow + Theme.s1
-                            Text {
-                                anchors.left: parent.left; anchors.leftMargin: Theme.s3; width: 104
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: qsTr("Orientation")
-                                font.family: Theme.fontFamily; font.pixelSize: Theme.fsLabel; color: Theme.textMuted
-                            }
+                        Field {
+                            label: qsTr("Orientation")
                             SegmentedControl {
-                                anchors.left: parent.left; anchors.leftMargin: Theme.s3 + 104
-                                anchors.verticalCenter: parent.verticalCenter
+                                width: parent.width
+                                fill: true
                                 labels: [qsTr("Auto"), qsTr("Portrait"), qsTr("Landscape")]
                                 tips: [qsTr("Each page turns to suit its photo."), qsTr("Every page upright."), qsTr("Every page on its side.")]
                                 currentIndex: ["auto", "portrait", "landscape"].indexOf(root.sheetOrientation)
                                 onActivated: i => root.sheetOrientation = ["auto", "portrait", "landscape"][i]
                             }
                         }
-                        Item {
-                            width: parent.width; height: Theme.hRow + Theme.s1
-                            Text {
-                                anchors.left: parent.left; anchors.leftMargin: Theme.s3; width: 104
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: qsTr("Paper profile")
-                                font.family: Theme.fontFamily; font.pixelSize: Theme.fsLabel; color: Theme.textMuted
-                            }
-                            Text {
-                                anchors.left: parent.left; anchors.leftMargin: Theme.s3 + 104
-                                anchors.right: iccButtons.left; anchors.rightMargin: Theme.s2
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: root.sheetIcc !== "" ? engine.proofProfileNameOf(root.sheetIcc) : qsTr("Driver-managed (sRGB)")
-                                elide: Text.ElideMiddle
-                                font.family: Theme.fontFamily; font.pixelSize: Theme.fsLabel; color: root.sheetIcc !== "" ? Theme.textSecondary : Theme.textMuted
-                            }
+                        Field {
+                            label: qsTr("Paper profile")
+                            hint: root.sheetIcc !== "" ? qsTr("OmaRAW converts the PDF pages into this profile. When printing the PDF, avoid applying the same colour conversion again.") : ""
+                            hintColor: Theme.warning
                             Row {
-                                id: iccButtons
-                                anchors.right: parent.right; anchors.rightMargin: Theme.s3; anchors.verticalCenter: parent.verticalCenter
-                                spacing: Theme.s1
-                                IconButton { iconName: "folder-open"; text: qsTr("Choose a paper profile…"); tip: qsTr("The ICC profile for this printer and paper; the pages are converted into it."); onClicked: paperIccDialog.open() }
-                                IconButton { visible: root.sheetIcc !== ""; iconName: "x"; text: qsTr("Use sRGB"); tip: qsTr("Keeps PDF pages in sRGB for the application or lab receiving the file."); onClicked: root.sheetIcc = "" }
-                            }
-                        }
-                        Item {
-                            visible: root.sheetIcc !== ""
-                            width: parent.width; height: Theme.hRow + Theme.s1
-                            Text {
-                                anchors.left: parent.left; anchors.leftMargin: Theme.s3; width: 104
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: qsTr("Intent")
-                                font.family: Theme.fontFamily; font.pixelSize: Theme.fsLabel; color: Theme.textMuted
+                                width: parent.width
+                                spacing: Theme.s2
+                                Text {
+                                    width: Math.max(0, parent.width - iccButtons.width - parent.spacing)
+                                    height: Theme.hControl
+                                    text: root.sheetIcc !== "" ? engine.proofProfileNameOf(root.sheetIcc) : qsTr("Driver-managed (sRGB)")
+                                    elide: Text.ElideMiddle
+                                    verticalAlignment: Text.AlignVCenter
+                                    font.family: Theme.fontFamily; font.pixelSize: Theme.fsControl
+                                    color: root.sheetIcc !== "" ? Theme.textPrimary : Theme.textMuted
+                                }
+                                Row {
+                                    id: iccButtons
+                                    spacing: Theme.s1
+                                    IconButton { iconName: "folder-open"; text: qsTr("Choose a paper profile…"); tip: qsTr("The ICC profile for this printer and paper; the pages are converted into it."); onClicked: paperIccDialog.open() }
+                                    IconButton { visible: root.sheetIcc !== ""; width: visible ? Theme.szIconHit : 0; iconName: "x"; text: qsTr("Use sRGB"); tip: qsTr("Keeps PDF pages in sRGB for the application or lab receiving the file."); onClicked: root.sheetIcc = "" }
+                                }
                             }
                             ComboField {
-                                anchors.left: parent.left; anchors.leftMargin: Theme.s3 + 104
-                                anchors.right: parent.right; anchors.rightMargin: Theme.s3
-                                anchors.verticalCenter: parent.verticalCenter
+                                visible: root.sheetIcc !== ""
+                                width: parent.width
                                 model: [qsTr("Perceptual"), qsTr("Relative colorimetric"), qsTr("Saturation"), qsTr("Absolute colorimetric")]
                                 tipTitle: qsTr("Rendering intent"); tip: qsTr("How colours the paper cannot show are brought in; perceptual for photos.")
                                 currentIndex: root.sheetIntent
                                 onActivated: i => root.sheetIntent = i
                             }
+                            Toggle {
+                                visible: root.sheetIcc !== ""
+                                width: parent.width
+                                height: Theme.hRow + Theme.s2
+                                label: qsTr("Black point compensation")
+                                tip: qsTr("Maps the picture's black to the paper's darkest black so shadows are not crushed.")
+                                checkable: false
+                                checked: root.sheetBlackPoint
+                                onClicked: root.sheetBlackPoint = !root.sheetBlackPoint
+                            }
                         }
-                        Row {
-                            visible: root.sheetIcc !== ""
-                            x: Theme.s3; height: Theme.hRow
-                            Toggle { anchors.verticalCenter: parent.verticalCenter; label: qsTr("Black point compensation"); tip: qsTr("Maps the picture's black to the paper's darkest black so shadows are not crushed."); checkable: false; checked: root.sheetBlackPoint; onClicked: root.sheetBlackPoint = !root.sheetBlackPoint }
+                        Field {
+                            SliderField {
+                                width: parent.width; stacked: true
+                                label: qsTr("Columns"); from: 1; to: 8; stepSize: 1; decimals: 0
+                                tip: qsTr("Thumbnails across each contact sheet page.")
+                                value: root.sheetColumns
+                                onEdited: v => root.sheetColumns = v
+                                onEditingFinished: v => root.sheetColumns = v
+                            }
                         }
-                        Text {
-                            visible: root.sheetIcc !== ""
-                            x: Theme.s3; width: parent.width - Theme.s3 * 2; wrapMode: Text.WordWrap
-                            text: qsTr("OmaRAW converts the PDF pages into this profile. When printing the PDF, avoid applying the same colour conversion again.")
-                            font.family: Theme.fontFamily; font.pixelSize: Theme.fsLabel; color: Theme.warning
-                        }
-                        SliderField {
-                            x: Theme.s3; width: parent.width - Theme.s3 * 2
-                            label: qsTr("Columns"); from: 1; to: 8; stepSize: 1; decimals: 0
-                            tip: qsTr("Thumbnails across each contact sheet page.")
-                            value: root.sheetColumns
-                            onEdited: v => root.sheetColumns = v
-                            onEditingFinished: v => root.sheetColumns = v
-                        }
-                        SliderField {
-                            x: Theme.s3; width: parent.width - Theme.s3 * 2
-                            label: qsTr("Rows"); from: 1; to: 8; stepSize: 1; decimals: 0
-                            tip: qsTr("Thumbnails down each contact sheet page.")
-                            value: root.sheetRows
-                            onEdited: v => root.sheetRows = v
-                            onEditingFinished: v => root.sheetRows = v
+                        Field {
+                            SliderField {
+                                width: parent.width; stacked: true
+                                label: qsTr("Rows"); from: 1; to: 8; stepSize: 1; decimals: 0
+                                tip: qsTr("Thumbnails down each contact sheet page.")
+                                value: root.sheetRows
+                                onEdited: v => root.sheetRows = v
+                                onEditingFinished: v => root.sheetRows = v
+                            }
                         }
                         Column {
-                            x: Theme.s3; width: parent.width - Theme.s3 * 2
-                            spacing: Theme.s1
-                            Toggle { label: qsTr("Captions (file names)"); tip: qsTr("Prints each file's name under its thumbnail."); checked: root.sheetCaptions; onClicked: root.sheetCaptions = !root.sheetCaptions }
-                        }
-                        Item {
-                            width: parent.width; height: Theme.hRow + Theme.s1
-                            Text {
-                                anchors.left: parent.left; anchors.leftMargin: Theme.s3; width: 104
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: qsTr("Sheet title")
-                                font.family: Theme.fontFamily; font.pixelSize: Theme.fsLabel; color: Theme.textMuted
+                            width: parent.width
+                            spacing: Theme.s2
+                            topPadding: Theme.s2
+                            bottomPadding: Theme.s1
+                            leftPadding: Theme.s3
+                            rightPadding: Theme.s3
+                            Toggle {
+                                width: parent.width - parent.leftPadding - parent.rightPadding
+                                height: Theme.hRow + Theme.s2
+                                label: qsTr("Captions (file names)")
+                                tip: qsTr("Prints each file's name under its thumbnail.")
+                                checked: root.sheetCaptions
+                                onClicked: root.sheetCaptions = !root.sheetCaptions
                             }
+                        }
+                        Field {
+                            label: qsTr("Sheet title")
                             SearchField {
-                                anchors.left: parent.left; anchors.leftMargin: Theme.s3 + 104
-                                anchors.right: parent.right; anchors.rightMargin: Theme.s3
-                                anchors.verticalCenter: parent.verticalCenter
+                                width: parent.width
+                                glyph: "type"
                                 placeholder: qsTr("Optional header")
                                 tip: qsTr("A title printed at the top of every page.")
                                 text: root.sheetTitle
@@ -827,26 +886,33 @@ Item {
                                 onCleared: root.sheetTitle = ""
                             }
                         }
-                        Row {
-                            x: Theme.s3; spacing: Theme.s2
+                        Column {
+                            id: sheetActions
+                            width: parent.width
+                            spacing: Theme.s2
+                            topPadding: Theme.s2
+                            bottomPadding: Theme.s2
+                            leftPadding: Theme.s3
+                            rightPadding: Theme.s3
                             readonly property bool can: root.sourceCount > 0 && root.folder !== ""
                             ToolButton {
                                 iconName: "layout-grid"; text: qsTr("Contact sheet PDF"); showLabel: true
                                 tip: qsTr("A PDF of thumbnails in the grid set above, written to the export folder.")
-                                enabled: parent.can
+                                enabled: sheetActions.can
                                 onClicked: root.makeContactSheet()
                             }
                             ToolButton {
                                 iconName: "printer"; text: root.sheetBusy ? qsTr("Rendering…") : qsTr("Print PDF, one per page"); showLabel: true
                                 tip: qsTr("A PDF with each photo rendered through the engine on its own page, written to the export folder.")
-                                enabled: parent.can && engine.ready && !engine.exporting && !root.sheetBusy
+                                enabled: sheetActions.can && engine.ready && !engine.exporting && !root.sheetBusy
                                 onClicked: root.makePrintSheet()
                             }
-                        }
-                        Text {
-                            x: Theme.s3; width: parent.width - Theme.s3 * 2; wrapMode: Text.WordWrap
-                            text: qsTr("PDFs land in the destination folder, %1 × %2 photos per contact-sheet page from the Library thumbnails; the print layout renders every photo at 300 dpi for the paper first.").arg(root.sheetColumns).arg(root.sheetRows)
-                            font.family: Theme.fontFamily; font.pixelSize: Theme.fsLabel; color: Theme.textMuted
+                            Text {
+                                width: parent.width - parent.leftPadding - parent.rightPadding
+                                wrapMode: Text.WordWrap
+                                text: qsTr("PDFs land in the destination folder, %1 × %2 photos per contact-sheet page from the Library thumbnails; the print layout renders every photo at 300 dpi for the paper first.").arg(root.sheetColumns).arg(root.sheetRows)
+                                font.family: Theme.fontFamily; font.pixelSize: Theme.fsLabel; color: Theme.textMuted
+                            }
                         }
                     }
                     InspectorGroup {
@@ -858,13 +924,20 @@ Item {
                         InspectorRow { label: qsTr("Offline"); value: root.offlineCount > 0 ? qsTr("%1 source file%2 missing — they will fail").arg(root.offlineCount).arg(root.offlineCount === 1 ? "" : "s") : ""; hideEmpty: true }
                         Text {
                             visible: root.spaceShort
-                            x: Theme.s3; width: parent.width - Theme.s3 * 2; wrapMode: Text.WordWrap
+                            width: parent.width
+                            leftPadding: Theme.s3
+                            rightPadding: Theme.s3
+                            wrapMode: Text.WordWrap
                             text: qsTr("The destination may not have room for this export.")
                             font.family: Theme.fontFamily; font.pixelSize: Theme.fsLabel; color: Theme.warning
                         }
                     }
                     Item { width: 1; height: Theme.s3 }
-                    Rectangle {
+                    Item {
+                        width: parent.width
+                        height: exportButton.height
+                        Rectangle {
+                        id: exportButton
                         x: Theme.s3; width: parent.width - Theme.s3 * 2; height: Theme.hControl + Theme.s3
                         radius: Theme.rControl
                         readonly property bool can: engine.ready && root.sourceCount > 0 && root.folder !== "" && root.destSpace.writable !== false && !engine.exporting && root.outputProfileError === ""
@@ -874,19 +947,20 @@ Item {
                             anchors.centerIn: parent
                             text: engine.exporting ? qsTr("Exporting…") : qsTr("Export %1 photo%2").arg(root.sourceCount).arg(root.sourceCount === 1 ? "" : "s")
                             font.family: Theme.fontFamily; font.pixelSize: Theme.fsControl; font.weight: Theme.wHeading
-                            color: parent.can ? Theme.accentText : Theme.textMuted
+                            color: exportButton.can ? Theme.accentText : Theme.textMuted
                         }
                         HoverHandler { id: exportHover }
                         Tooltip {
                             text: qsTr("Export")
-                            description: parent.can ? qsTr("Queues every photo in the source with the settings above; files are written in the background.")
+                            description: exportButton.can ? qsTr("Queues every photo in the source with the settings above; files are written in the background.")
                                        : root.folder === "" ? qsTr("Choose a destination folder first.") : root.sourceCount === 0 ? qsTr("Nothing to export: select photos or choose a source.") : ""
                             visible: exportHover.hovered && description !== ""
                         }
                         TapHandler {
                             id: exportTap
-                            enabled: parent.can
+                            enabled: exportButton.can
                             onTapped: engine.exportBatchItems(root.sourceItems, root.folder, root.maxEdge, root.quality, root.nameArg, root.format, root.bpp, engine.metaFlagsFor(root.metaExif, root.metaLocation, root.metaKeywords, root.metaHistory), root.finishingActive ? root.finishing : {}, root.resizeArg)
+                        }
                         }
                     }
                   }
@@ -896,7 +970,7 @@ Item {
         OutputQueue {
             id: queue
             width: parent.width
-            height: root.shell.filmstripHeight + Theme.s5
+            height: queue.collapsed ? Theme.hDockHeader : root.shell.filmstripHeight + Theme.s5
         }
     }
 }

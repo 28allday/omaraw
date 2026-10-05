@@ -1,7 +1,8 @@
 import QtQuick
 import OmaRaw.Ui
 
-// Key/value row: muted key at a fixed width, selectable value that elides.
+// Key/value row: muted key at a fixed width, value that elides in the middle.
+// A truncated value's full text is the tooltip.
 Item {
     id: root
     property string label: ""
@@ -22,21 +23,22 @@ Item {
         color: Theme.textMuted
         elide: Text.ElideRight
     }
-    TextInput {
+    Text {
+        id: valueText
         anchors.left: key.right
         anchors.right: parent.right
         anchors.rightMargin: Theme.s3
         anchors.verticalCenter: parent.verticalCenter
         text: root.value
-        // Show the start of a long value, not its tail.
-        onTextChanged: cursorPosition = 0
-        readOnly: true
-        selectByMouse: true
-        clip: true
+        elide: Text.ElideMiddle
         font.family: root.mono ? Theme.monoFamily : Theme.fontFamily
         font.pixelSize: Theme.fsLabel
         color: Theme.textPrimary
-        selectionColor: Theme.accent
-        selectedTextColor: Theme.accentText
+    }
+    HoverHandler { id: valueHover }
+    Tooltip {
+        text: root.label
+        description: root.value
+        visible: valueHover.hovered && valueText.truncated
     }
 }

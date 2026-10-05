@@ -337,6 +337,17 @@ Rectangle {
                 SMenuItem { objectName: "rawClippingAction"; text: qsTr("Mark Clipped Sensor Areas"); tip: qsTr("Mark saturated sensor samples in magenta, before exposure or highlight recovery. RAW files only."); checkable: true; checked: engine.rawClippingShown; enabled: engine.imageId >= 0; onTriggered: engine.rawClippingShown = !engine.rawClippingShown }
             }
             SMenuItem { text: qsTr("Lights Out"); tip: qsTr("Hide surrounding panels in Develop to concentrate on the photograph."); shortcut: "Shift+L"; checkable: true; checked: root.shell.lightsOut; enabled: root.shell.workspace === "Develop"; onTriggered: root.shell.lightsOut = !root.shell.lightsOut }
+            SMenuItem {
+                objectName: "lightInterfaceAction"
+                text: qsTr("Light Interface")
+                tip: backend.colourCritical
+                     ? qsTr("Colour Critical uses a neutral interface. Turn it off to use the light interface.")
+                     : qsTr("Use light panels and dark text. Photographs keep a neutral surround.")
+                checkable: true
+                enabled: !backend.colourCritical
+                checked: backend.lightInterface
+                onTriggered: backend.lightInterface = !backend.lightInterface
+            }
             SMenuItem { objectName: "colourCriticalAction"; text: qsTr("Colour Critical"); tip: qsTr("Use a neutral grey interface and a fixed dark grey photo surround."); checkable: true; checked: backend.colourCritical; onTriggered: backend.colourCritical = !backend.colourCritical }
             StyledMenu {
                 title: qsTr("Viewer Background")

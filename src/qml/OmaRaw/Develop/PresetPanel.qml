@@ -82,26 +82,36 @@ Column {
             IconButton { iconName: "plus"; text: qsTr("Save current settings as a preset"); tip: qsTr("Names the current adjustments so they can be applied to other photos in one click."); enabled: engine.imageId >= 0; onClicked: root.openStylePreset() }
         ]
     }
-    SearchField {
-        x: Theme.s2; width: parent.width - Theme.s2 * 2
-        placeholder: qsTr("Search names, categories or tags")
-        tip: qsTr("Narrows the list to presets whose name, category or tags contain what you type.")
-        onTextChanged: root.filter = text
-        onCleared: root.filter = ""
-    }
-    ComboField {
-        objectName: "presetCategoryFilter"
-        x: Theme.s2; width: parent.width - Theme.s2 * 2
-        model: [qsTr("All categories"), qsTr("Uncategorised")].concat(root.categoryNames)
-        tipTitle: qsTr("Preset category"); tip: qsTr("Shows only the presets filed under one category.")
-        currentIndex: root.uncategorisedOnly ? 1 : root.categoryFilter === "" ? 0 : Math.max(0, root.categoryNames.indexOf(root.categoryFilter) + 2)
-        onActivated: index => {
-            root.uncategorisedOnly = index === 1
-            root.categoryFilter = index > 1 ? root.categoryNames[index - 2] : ""
+    Item {
+        width: parent.width
+        height: presetFilters.implicitHeight + Theme.s2
+        Column {
+            id: presetFilters
+            x: Theme.s3
+            y: Theme.s2
+            width: parent.width - Theme.s3 * 2
+            spacing: Theme.s2
+            SearchField {
+                width: parent.width
+                placeholder: qsTr("Search names, categories or tags")
+                tip: qsTr("Narrows the list to presets whose name, category or tags contain what you type.")
+                onTextChanged: root.filter = text
+                onCleared: root.filter = ""
+            }
+            ComboField {
+                objectName: "presetCategoryFilter"
+                width: parent.width
+                model: [qsTr("All categories"), qsTr("Uncategorised")].concat(root.categoryNames)
+                tipTitle: qsTr("Preset category"); tip: qsTr("Shows only the presets filed under one category.")
+                currentIndex: root.uncategorisedOnly ? 1 : root.categoryFilter === "" ? 0 : Math.max(0, root.categoryNames.indexOf(root.categoryFilter) + 2)
+                onActivated: index => {
+                    root.uncategorisedOnly = index === 1
+                    root.categoryFilter = index > 1 ? root.categoryNames[index - 2] : ""
+                }
+                Accessible.name: qsTr("Preset category")
+            }
         }
-        Accessible.name: qsTr("Preset category")
     }
-    Item { width: 1; height: Theme.s1 }
     ListView {
         id: browser
         objectName: "presetBrowser"

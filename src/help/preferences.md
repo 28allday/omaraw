@@ -2,13 +2,14 @@
 
 Edit ▸ Preferences… has four pages. Settings save as you change them; Close returns to your photos. Each page scrolls independently of the page buttons and Close button.
 
-- **Appearance**: Colour Critical mode, high contrast, reduced motion, viewer background, colour management, keyboard shortcuts and panel layout.
+- **Appearance**: Dark or Light interface, Colour Critical mode, high contrast, reduced motion, viewer background, colour management, keyboard shortcuts and panel layout.
 - **Library**: startup, daily backups, automatic advance, colour label names and metadata writing. Leave **Choose a library at startup** off to reopen the last library.
 - **Performance**: automatic or custom memory allocation, a shared disk cache size, usage and free-space readouts, and cache cleanup. Changes are remembered between launches.
 - **Processing**: the first edit for new RAW photos, imported camera profiles, preview speed and export quality.
-- **Colour Critical**: a single switch for a neutral dark-grey interface. The canvas surround is `#262626`, the main interface `#2D2D2D`, panels `#353535`, raised controls `#404040`, input fields `#202020`, hover states `#454545`, text `#D6D6D6`, muted text `#909090`, and dividers `#484848`. Decorative accents become grey, including selections and focus indicators. High contrast also stays neutral. The switch takes effect immediately and is remembered between launches. Turning it off restores the usual interface and your chosen viewer background.
+- **Light interface**: light panels and dark text, from View ▸ Light Interface or Preferences ▸ Appearance. It is remembered. The photograph keeps a neutral dark surround, so the picture does not change with the interface. Colour Critical overrides Light until Colour Critical is turned off.
+- **Colour Critical**: a single switch for a neutral dark-grey interface. The canvas surround is `#262626`, the main interface `#2D2D2D`, panels `#353535`, raised controls `#404040`, input fields `#202020`, hover states `#454545`, text `#D6D6D6`, muted text `#909090`, and dividers `#484848`. Decorative accents become grey, including selections and focus indicators. High contrast also stays neutral. The switch takes effect immediately and is remembered between launches. Turning it off restores Dark or Light, and your chosen viewer background.
 - **Photos and colour tools**: Colour Critical changes the interface only. Photo previews, edits, exports, RGB histograms, colour wheels and photo-label swatches keep their colours. The mode is separate from colour management and monitor calibration.
-- **Desktop theme**: in the usual interface, the accent (buttons, selection, focus) follows your Omarchy theme and changes with it while OmaRAW is open. The remaining interface colours stay fixed. Without Omarchy, the accent is OmaRAW's own blue. Colour Critical uses neutral accents regardless of the desktop theme.
+- **Desktop theme**: in Dark and Light, the accent (buttons, selection, focus) follows your Omarchy theme and changes with it while OmaRAW is open. The remaining interface colours stay fixed for that appearance. Without Omarchy, the accent is OmaRAW's own blue. Colour Critical uses neutral accents regardless of the desktop theme.
 - **Keyboard**: every shortcut, editable.
 - **Processing → Speed and quality**: **Faster fitted previews** (on by default) speeds up the fitted view and uses a smaller live preview while you drag a control. The normal fitted resolution and full zoomed detail return on release; exports keep full quality. **Process exports at full resolution** runs every adjustment at the source size and downsizes last, slower on large files. GPU processing can be switched off; every job has a CPU fallback.
 
@@ -34,4 +35,4 @@ View ▸ Colour Management… selects the OCIO configuration, display, view and 
 The same dialog controls monitor calibration: on X11 the active colord profile is used; on Wayland the desktop manages the monitor; a manual RGB ICC is available for unmanaged displays. Physical monitor and printer verification is still yours to do.
 
 
-Label names, the camera profiles folder, colour management and automatic metadata-writing policies are available here. The View menu keeps the Colour Critical switch and panel visibility controls. All these settings remain searchable with Ctrl+K.
+Label names, the camera profiles folder, colour management and automatic metadata-writing policies are available here. The View menu keeps the Light interface and Colour Critical switches, and the panel visibility controls. All these settings remain searchable with Ctrl+K.
