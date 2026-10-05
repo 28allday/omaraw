@@ -51,6 +51,7 @@ gpg --batch --homedir "$work/keys" --status-fd 1 --verify "$work/rootfs.sig" "$w
 awk -v key="$fingerprint" '$1 == "[GNUPG:]" && $2 == "VALIDSIG" && ($3 == key || $NF == key) {ok=1} END {exit !ok}' "$output/logs/rootfs-signature.txt"
 sha256sum "$work/rootfs.tar" > "$output/logs/rootfs-sha256.txt"
 sudo tar --extract --file "$work/rootfs.tar" --directory "$rootfs" --strip-components="$strip" --numeric-owner
+sudo chown root:root "$rootfs"
 sudo mkdir -p "$rootfs/work/source" "$rootfs/work/report"
 # Export only tracked files. Recreate minimal Git metadata for the package
 # snapshot; no checkout credentials, host files or private development tools.
