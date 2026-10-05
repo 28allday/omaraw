@@ -256,7 +256,7 @@ Rectangle {
         anchors.leftMargin: Theme.hairline
         spacing: 0
         Item {
-            width: parent.width; height: Theme.hControl + Theme.s3
+            width: parent.width; height: Theme.hField + Theme.s2
             ComboField {
                 objectName: "scopeSelector"
                 anchors.left: parent.left; anchors.right: expandScope.left
@@ -274,7 +274,7 @@ Rectangle {
                 objectName: "expandScopeButton"
                 anchors.right: parent.right; anchors.rightMargin: Theme.s3
                 anchors.bottom: parent.bottom
-                height: Theme.hControl; width: Theme.hControl
+                height: Theme.hField; width: Theme.hField
                 iconName: engine.scopeExpanded ? "minimize-2" : "maximize-2"
                 text: engine.scopeExpanded ? qsTr("Compact scopes") : qsTr("Enlarge scopes")
                 tip: qsTr("Show a larger, movable scope over the photo while keeping adjustments available.")

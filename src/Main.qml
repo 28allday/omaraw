@@ -20,7 +20,7 @@ C.ApplicationWindow {
     color: Theme.windowBg
     // An unresolved palette keeps the normal Qt style; critical mode also
     // makes standard dialog controls use the neutral interface colours.
-    palette: Theme.colourCritical ? criticalPalette : defaultPalette
+    palette: (Theme.light || Theme.colourCritical) ? criticalPalette : defaultPalette
     Palette { id: defaultPalette }
     Palette {
         id: criticalPalette
@@ -75,6 +75,7 @@ C.ApplicationWindow {
     Binding { target: Theme; property: "reducedMotion"; value: backend.reducedMotion }
     Binding { target: Theme; property: "highContrast"; value: backend.highContrast }
     Binding { target: Theme; property: "colourCritical"; value: backend.colourCritical }
+    Binding { target: Theme; property: "light"; value: backend.lightInterface && !backend.colourCritical }
     function resetLayout() {
         sourceDockVisible = true; inspectorVisible = true; filmstripVisible = true
         sourceDockWidth = Theme.wSourceDock; inspectorWidth = Theme.wInspector
@@ -356,6 +357,7 @@ C.ApplicationWindow {
         id: commandPalette
         menuBar: titleBar.menuBar
         extras: [
+            {label: qsTr("Light Interface"), path: qsTr("Preferences"), shortcut: "", tip: qsTr("Use light panels and dark text. Photographs keep a neutral surround."), enabled: true, run: () => backend.lightInterface = !backend.lightInterface},
             {label: qsTr("High Contrast"), path: qsTr("Preferences"), shortcut: "", tip: qsTr("Increase contrast in interface text and borders."), enabled: true, run: () => backend.highContrast = !backend.highContrast},
             {label: qsTr("Reduced Motion"), path: qsTr("Preferences"), shortcut: "", tip: qsTr("Reduce interface animations."), enabled: true, run: () => backend.reducedMotion = !backend.reducedMotion},
             {label: qsTr("Label Names…"), path: qsTr("Preferences"), shortcut: "", tip: qsTr("Name your colour labels."), enabled: true, run: () => win.editLabelNames()},

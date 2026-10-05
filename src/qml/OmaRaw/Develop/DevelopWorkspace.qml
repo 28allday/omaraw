@@ -56,7 +56,7 @@ Item {
     readonly property color canvas: Theme.colourCritical ? Theme.pasteboard : lightsOut ? "#000000"
         : shell && shell.viewerBackground === "black" ? "#000000"
         : shell && shell.viewerBackground === "grey" ? "#6E6E6E"
-        : shell && shell.viewerBackground === "light" ? "#D4D4D4" : Theme.windowBg
+        : shell && shell.viewerBackground === "light" ? "#D4D4D4" : Theme.pasteboard
     function openTool(tool) { engine.cropMode = false; right.group = tool }
     function toggleCrop() { if (engine.imageId >= 0) engine.cropMode = !engine.cropMode }
     // Escape: back from Masks or Retouch to the sections. False when neither was open.

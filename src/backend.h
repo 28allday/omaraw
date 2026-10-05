@@ -104,6 +104,9 @@ class Backend : public QObject {
     Q_PROPERTY(CatalogMaintenance *maintenance READ maintenance CONSTANT)
     Q_PROPERTY(bool highContrast READ highContrast WRITE setHighContrast NOTIFY accessibilityChanged)
     Q_PROPERTY(bool colourCritical READ colourCritical WRITE setColourCritical NOTIFY colourCriticalChanged)
+    // Light panels and dark text. The photograph's surround stays neutral.
+    // Colour Critical paints its own grey and ignores this until it is off.
+    Q_PROPERTY(bool lightInterface READ lightInterface WRITE setLightInterface NOTIFY lightInterfaceChanged)
     // Named sets of the browser's filters and sort: [{name, text, rating, flag, label, sortKey, sortDescending}].
     Q_PROPERTY(QVariantList savedFilters READ savedFilters NOTIFY savedFiltersChanged)
 
@@ -193,6 +196,8 @@ public:
     void setHighContrast(bool on);
     bool colourCritical() const { return m_colourCritical; }
     void setColourCritical(bool on);
+    bool lightInterface() const { return m_lightInterface; }
+    void setLightInterface(bool on);
     Q_INVOKABLE void setShortcut(const QString &id, const QString &keys);
     Q_INVOKABLE void resetShortcut(const QString &id);
     Q_INVOKABLE void resetShortcuts();
@@ -593,6 +598,7 @@ signals:
     void shortcutsChanged();
     void accessibilityChanged();
     void colourCriticalChanged();
+    void lightInterfaceChanged();
     void labelNamesChanged();
     void holdKey(const QString &name, bool down);
     void recentKeywordsChanged();
@@ -680,6 +686,7 @@ private:
     QVariantMap m_shortcutOverrides;
     bool m_reducedMotion = false, m_highContrast = false;
     bool m_colourCritical = false;
+    bool m_lightInterface = false;
     QVariantMap m_shortcutDefaults;   // id → default keys, from the window
     QVariantMap m_labelNames;
     bool eventFilter(QObject *watched, QEvent *event) override;

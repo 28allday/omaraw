@@ -12,7 +12,13 @@ C.AbstractButton {
     property string shortcut: ""
     // One sentence under the tooltip's title: what pressing it does.
     property string tip: ""
-    property color iconColor: checked ? Theme.accent : Theme.textSecondary
+    // No filled well. Callers that already draw a plate (the Develop tool
+    // chips) set this so a light-mode hover fill cannot cover the glyph.
+    property bool bare: false
+    // Drawn on Theme.scrim. The glyph stays light and the hover plate stays
+    // dark, in Light and in Dark.
+    property bool onScrim: false
+    property color iconColor: onScrim ? Theme.scrimText : (checked ? Theme.accent : Theme.textSecondary)
     // Flat buttons carry no chrome until hovered — used in dense toolbars
     // where a grid of filled boxes would read as noise.
     property bool flat: true
@@ -32,6 +38,15 @@ C.AbstractButton {
     background: Rectangle {
         radius: Theme.rControl
         color: {
+            if (root.onScrim) {
+                if (root.down)
+                    return Theme.scrimPressed
+                if (root.enabled && root.hovered)
+                    return Theme.scrimHover
+                return "transparent"
+            }
+            if (root.bare)
+                return "transparent"
             const base = root.checked || !root.flat ? Theme.controlBg : Theme.panelRaised
             if (root.down)
                 return Theme.pressedOn(base)

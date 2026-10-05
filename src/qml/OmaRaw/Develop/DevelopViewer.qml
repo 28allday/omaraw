@@ -594,7 +594,7 @@ Rectangle {
                 : view.hasImage ? ""
                 : engine.ready ? qsTr("Embedded preview") : engine.status
             font.family: Theme.fontFamily; font.pixelSize: Theme.fsLabel
-            color: view.hasImage && engine.proofing ? Theme.accent : view.hasImage ? Theme.textSecondary : Theme.warning
+            color: view.hasImage && engine.proofing ? Theme.accent : view.hasImage ? Theme.scrimText : Theme.warning
         }
     }
     // Compare strip: what is on each side, the layout toggle, and a way out.
@@ -621,7 +621,7 @@ Rectangle {
                 textFormat: Text.PlainText
                 text: qsTr("%1  ·  Current").arg(root.compareLabel)
                 elide: Text.ElideRight
-                font.family: Theme.fontFamily; font.pixelSize: Theme.fsLabel; color: Theme.textSecondary
+                font.family: Theme.fontFamily; font.pixelSize: Theme.fsLabel; color: Theme.scrimText
             }
             SegmentedControl {
                 id: compareModes
@@ -631,7 +631,7 @@ Rectangle {
                 currentIndex: root.compareMode === "side" ? 1 : 0
                 onActivated: i => root.compareMode = i === 1 ? "side" : "split"
             }
-            IconButton { id: compareClose; anchors.verticalCenter: parent.verticalCenter; iconName: "x"; text: qsTr("Stop comparing"); tip: qsTr("Back to the current render alone."); onClicked: root.compareClosed() }
+            IconButton { id: compareClose; anchors.verticalCenter: parent.verticalCenter; iconName: "x"; text: qsTr("Stop comparing"); tip: qsTr("Back to the current render alone."); onScrim: true; onClicked: root.compareClosed() }
         }
     }
     CropToolbar {
@@ -643,90 +643,138 @@ Rectangle {
         visible: root.cropMode
         overlay: cropOverlay
     }
-    // Tool pills: crop & straighten, clipping indicators, false colour.
+    // Tool pills over the photograph. The chip stays dark, so the glyph uses
+    // scrim text. A light-mode secondary colour paints the crop mark black.
+    component ScrimTool: Rectangle {
+        id: plate
+        property string iconName: ""
+        property string toolText: ""
+        property string shortcut: ""
+        property string tip: ""
+        property string buttonName: ""
+        property bool active: false
+        signal triggered()
+        width: Theme.hControl + Theme.s1
+        height: width
+        radius: Theme.rControl
+        color: {
+            if (plate.active) {
+                if (button.down)
+                    return Theme.accentPressed
+                if (button.hovered)
+                    return Theme.hovered(Theme.accent)
+                return Theme.accent
+            }
+            if (button.down)
+                return Theme.scrimPressed
+            if (button.hovered)
+                return Theme.scrimHover
+            return Theme.scrim
+        }
+        IconButton {
+            id: button
+            objectName: plate.buttonName
+            anchors.fill: parent
+            bare: true
+            iconName: plate.iconName
+            text: plate.toolText
+            shortcut: plate.shortcut
+            tip: plate.tip
+            iconColor: plate.active ? Theme.accentText : Theme.scrimText
+            onClicked: plate.triggered()
+        }
+    }
     Row {
         anchors.left: parent.left; anchors.top: parent.top; anchors.margins: Theme.s3
         spacing: Theme.s1
         visible: view.hasImage || root.cropMode
-        Rectangle {
-            width: Theme.hControl + Theme.s1; height: Theme.hControl + Theme.s1
-            radius: Theme.rControl; color: root.cropMode ? Theme.accent : Theme.scrim
-            IconButton {
-                anchors.centerIn: parent
-                iconName: "crop"; text: qsTr("Crop & straighten"); shortcut: "R"
-                tip: qsTr("Drag the frame's edges and corners, straighten, pick a ratio.")
-                iconColor: root.cropMode ? Theme.accentText : Theme.textSecondary
-                onClicked: engine.cropMode = !engine.cropMode
-            }
+        ScrimTool {
+            iconName: "crop"; toolText: qsTr("Crop & straighten"); shortcut: "R"
+            tip: qsTr("Drag the frame's edges and corners, straighten, pick a ratio.")
+            active: root.cropMode
+            onTriggered: engine.cropMode = !engine.cropMode
         }
-        Rectangle {
-            width: Theme.hControl + Theme.s1; height: Theme.hControl + Theme.s1
-            radius: Theme.rControl; color: engine.clippingShown ? Theme.accent : Theme.scrim
-            IconButton {
-                anchors.centerIn: parent
-                iconName: "triangle-alert"; text: qsTr("Clipping indicators"); shortcut: "J"
-                tip: qsTr("Paints red where highlights are lost and blue where shadows are.")
-                iconColor: engine.clippingShown ? Theme.accentText : Theme.textSecondary
-                onClicked: engine.clippingShown = !engine.clippingShown
-            }
+        ScrimTool {
+            iconName: "triangle-alert"; toolText: qsTr("Clipping indicators"); shortcut: "J"
+            tip: qsTr("Paints red where highlights are lost and blue where shadows are.")
+            active: engine.clippingShown
+            onTriggered: engine.clippingShown = !engine.clippingShown
         }
-        Rectangle {
-            id: falseColourPill
-            width: Theme.hControl + Theme.s1; height: Theme.hControl + Theme.s1
-            radius: Theme.rControl; color: engine.falseColour ? Theme.accent : Theme.scrim
-            IconButton {
-                objectName: "falseColourButton"
-                anchors.centerIn: parent
-                iconName: "palette"; text: qsTr("False colour"); shortcut: "F"
-                tip: qsTr("Repaints the picture by brightness and shows an on-screen colour guide. The graph shows how much of the picture is in each zone.")
-                iconColor: engine.falseColour ? Theme.accentText : Theme.textSecondary
-                onClicked: engine.toggleFalseColour()
-            }
+        ScrimTool {
+            buttonName: "falseColourButton"
+            iconName: "palette"; toolText: qsTr("False colour"); shortcut: "F"
+            tip: qsTr("Repaints the picture by brightness and shows an on-screen colour guide. The graph shows how much of the picture is in each zone.")
+            active: engine.falseColour
+            onTriggered: engine.toggleFalseColour()
         }
     }
-    Row {
+    Rectangle {
         id: zoomControls
         objectName: "zoomControls"
         anchors.left: parent.left; anchors.bottom: parent.bottom; anchors.margins: Theme.s3
-        spacing: Theme.s1
         visible: view.hasImage && !root.cropMode
-        Repeater {
-            model: view.presets
-            Rectangle {
-                id: zoomPill
-                required property var modelData
-                readonly property bool at: view.isAt(modelData[0])
-                width: zl.implicitWidth + Theme.s3; height: Theme.hControl
-                radius: Theme.rControl
-                color: at ? Theme.accent : Theme.scrim
-                Text {
-                    id: zl
-                    anchors.centerIn: parent
-                    text: modelData[1]
-                    font.family: Theme.monoFamily; font.pixelSize: Theme.fsLabel
-                    color: parent.at ? Theme.accentText : Theme.textSecondary
-                }
-                TapHandler { onTapped: root.zoomToPreset(parent.modelData[0], parent.modelData[2]) }
-                HoverHandler { id: zoomHover }
-                Tooltip {
-                    text: zoomPill.modelData[1]
-                    description: zoomPill.modelData[2] === 0
-                                 ? (zoomPill.modelData[1] === qsTr("Fit") ? qsTr("The whole picture in the view; double-click the picture to toggle with 100%.") : qsTr("Fills the view on the short side."))
-                                 : qsTr("%1 picture pixels per screen pixel; Ctrl+wheel steps through these.").arg(zoomPill.modelData[2] / 100)
-                    visible: zoomHover.hovered
+        implicitWidth: zoomRow.implicitWidth + Theme.s1 * 2
+        implicitHeight: Theme.hControl + Theme.s1 * 2
+        width: implicitWidth
+        height: implicitHeight
+        radius: Theme.rControl
+        color: Theme.panelRaised
+        border.width: Theme.hairline
+        border.color: Theme.borderStrong
+        Row {
+            id: zoomRow
+            anchors.centerIn: parent
+            spacing: Theme.s1
+            Repeater {
+                model: view.presets
+                Rectangle {
+                    id: zoomPill
+                    required property var modelData
+                    readonly property bool at: view.isAt(modelData[0])
+                    width: zl.implicitWidth + Theme.s3 * 2
+                    height: Theme.hControl
+                    radius: Theme.rControl
+                    color: at ? Theme.accent : zoomHover.hovered ? Theme.hoverBg : Theme.panelRaised
+                    Text {
+                        id: zl
+                        anchors.centerIn: parent
+                        text: modelData[1]
+                        font.family: Theme.monoFamily; font.pixelSize: Theme.fsLabel
+                        color: parent.at ? Theme.accentText : Theme.textSecondary
+                    }
+                    TapHandler { onTapped: root.zoomToPreset(parent.modelData[0], parent.modelData[2]) }
+                    HoverHandler { id: zoomHover }
+                    Tooltip {
+                        text: zoomPill.modelData[1]
+                        description: zoomPill.modelData[2] === 0
+                                     ? (zoomPill.modelData[1] === qsTr("Fit") ? qsTr("The whole picture in the view; double-click the picture to toggle with 100%.") : qsTr("Fills the view on the short side."))
+                                     : qsTr("%1 picture pixels per screen pixel; Ctrl+wheel steps through these.").arg(zoomPill.modelData[2] / 100)
+                        visible: zoomHover.hovered
+                    }
                 }
             }
-        }
-        // What the screen shows: image pixels per screen pixel.
-        Rectangle {
-            visible: view.percent > 0
-            width: pct.implicitWidth + Theme.s3; height: Theme.hControl
-            radius: Theme.rControl; color: Theme.scrim
-            Text {
-                id: pct
-                anchors.centerIn: parent
-                text: Math.round(view.percent) + "%"
-                font.family: Theme.monoFamily; font.pixelSize: Theme.fsLabel; color: Theme.textMuted
+            Item {
+                visible: view.percent > 0
+                width: Theme.hairline
+                height: Theme.hControl
+                Rectangle {
+                    anchors.centerIn: parent
+                    width: Theme.hairline
+                    height: parent.height - Theme.s2
+                    color: Theme.borderStrong
+                }
+            }
+            // What the screen shows: image pixels per screen pixel.
+            Item {
+                visible: view.percent > 0
+                width: pct.implicitWidth + Theme.s3
+                height: Theme.hControl
+                Text {
+                    id: pct
+                    anchors.centerIn: parent
+                    text: Math.round(view.percent) + "%"
+                    font.family: Theme.monoFamily; font.pixelSize: Theme.fsLabel; color: Theme.textMuted
+                }
             }
         }
     }

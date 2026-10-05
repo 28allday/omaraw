@@ -83,6 +83,7 @@ Backend::Backend(QObject *parent) : QObject(parent), m_catalog(catalogConnection
     m_labelNames = QSettings().value(QStringLiteral("labels/names")).toMap();
     m_highContrast = QSettings().value(QStringLiteral("access/highContrast"), false).toBool();
     m_colourCritical = QSettings().value(QStringLiteral("appearance/colourCritical"), false).toBool();
+    m_lightInterface = QSettings().value(QStringLiteral("appearance/light"), false).toBool();
     m_favouritePresets = QSettings().value(QStringLiteral("develop/favouritePresets")).toStringList();
     m_recentPresets = QSettings().value(QStringLiteral("develop/recentPresets")).toStringList();
     // Watched folders: a burst of writes becomes one import once the disk
@@ -205,6 +206,13 @@ void Backend::setColourCritical(bool on) {
     m_colourCritical = on;
     QSettings().setValue(QStringLiteral("appearance/colourCritical"), on);
     emit colourCriticalChanged();
+}
+
+void Backend::setLightInterface(bool on) {
+    if (on == m_lightInterface) return;
+    m_lightInterface = on;
+    QSettings().setValue(QStringLiteral("appearance/light"), on);
+    emit lightInterfaceChanged();
 }
 
 void Backend::setShortcut(const QString &id, const QString &keys) {

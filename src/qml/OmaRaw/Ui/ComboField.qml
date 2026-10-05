@@ -25,8 +25,8 @@ C.ComboBox {
     }
 
     implicitWidth: 140
-    implicitHeight: Theme.hControl
-    leftPadding: Theme.s2
+    implicitHeight: Theme.hField
+    leftPadding: Theme.s3
     rightPadding: indicator.width + Theme.s2 * 2
     topPadding: 0
     bottomPadding: 0
