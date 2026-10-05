@@ -7,7 +7,7 @@ separately, so you can always return to the starting image.
 
 ![Developing a photograph in OmaRAW](docs/screenshots/develop.png)
 
-**Beta 8 · Omarchy x86_64 and ARM64.** Start with a small collection and keep backups
+**Beta 9 · Omarchy x86_64 and ARM64.** Start with a small collection and keep backups
 of your photographs and catalog. Camera support and tethering depend on the
 camera; GPU acceleration depends on its driver.
 
@@ -47,10 +47,10 @@ then install:
 
 ```sh
 sha256sum --check --ignore-missing SHA256SUMS
-sudo pacman -U ./omaraw-0.1.0beta8-1-x86_64.pkg.tar.zst
+sudo pacman -U ./omaraw-0.1.0beta9-1-x86_64.pkg.tar.zst
 ```
 
-For ARM, use `omaraw-0.1.0beta8-1-aarch64.pkg.tar.zst` instead.
+For ARM, use `omaraw-0.1.0beta9-1-aarch64.pkg.tar.zst` instead.
 Continue only if the package checksum reports **OK**.
 
 Packages are currently unsigned. Use the files from this repository's Releases

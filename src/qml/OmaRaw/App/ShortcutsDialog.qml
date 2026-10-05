@@ -21,7 +21,7 @@ C.Popup {
     width: Math.min(800, parent ? parent.width - 32 : 800)
     height: Math.min(parent ? parent.height - 32 : 600, 720); padding: Theme.s4
     background: Rectangle { color: Theme.panelRaised; border.width: Theme.hairline; border.color: Theme.borderStrong; radius: Theme.rMenu }
-    onOpened: { filter = ""; capturing = ""; searchField.focusInput() }
+    onOpened: { searchField.text = ""; filter = ""; capturing = ""; searchField.focusInput() }
     onClosed: capturing = ""
 
     readonly property var entries: shell ? shell.shortcutTable.filter(e => !e.hidden).concat(
