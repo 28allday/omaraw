@@ -9,6 +9,7 @@ C.ApplicationWindow {
     property string version: ""
     property var quote: ({})
     property bool reduceMotion: false
+    property bool softwareInterface: false
     property bool confirmed: false
     property bool firstFramePresented: false
     property bool playbackReady: false
@@ -118,6 +119,13 @@ C.ApplicationWindow {
                     }
                 }
             }
+        }
+        Text {
+            objectName: "launchRenderingStatus"
+            x: 32; y: 130; width: 496
+            visible: root.softwareInterface
+            text: qsTr("Interface: software rendering (CPU)")
+            color: root.muted; font.family: root.launchFamily; font.pixelSize: 11
         }
         Column {
             id: quotation

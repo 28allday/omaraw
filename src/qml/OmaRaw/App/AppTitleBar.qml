@@ -14,6 +14,11 @@ Rectangle {
     property alias workspace: workspaces.current
     // The menu bar, for the command palette to walk.
     property alias menuBar: menuBar
+    readonly property bool menuOpen: {
+        for (let i = 0; i < menuBar.count; ++i)
+            if (menuBar.menuAt(i).visible) return true
+        return false
+    }
     // A colour label's name in force (Preferences ▸ Label names…), re-read when they change.
     function labelText(colour) { const names = backend.labelNames; return names[colour] ? names[colour] : backend.labelName(colour) }
 
@@ -381,7 +386,7 @@ Rectangle {
             SMenuItem { text: qsTr("Help for This Workspace"); tip: qsTr("Open the guide at the current workspace."); onTriggered: root.shell.help() }
             SMenuItem { text: qsTr("The Written Guide"); tip: qsTr("Open the installed manual and help pages as files."); onTriggered: backend.revealDocumentation() }
             SMenuItem { text: qsTr("Command Search…"); tip: qsTr("Find a menu command by typing its name, then press Return to run it."); shortcut: "Ctrl+K"; onTriggered: root.shell.commandPalette.open() }
-            SMenuItem { text: qsTr("Keyboard Shortcuts"); tip: qsTr("Show the shortcut reference for common actions."); shortcut: "?"; onTriggered: root.shell.shortcutsVisible = !root.shell.shortcutsVisible }
+            SMenuItem { text: qsTr("Keyboard Shortcuts"); tip: qsTr("Search keyboard shortcuts and change their keys."); shortcut: "?"; onTriggered: root.shell.editShortcuts() }
             MenuSep {}
             SMenuItem { text: qsTr("About OmaRAW"); tip: qsTr("Show the app version, credits and licence."); onTriggered: root.shell.about() }
         }

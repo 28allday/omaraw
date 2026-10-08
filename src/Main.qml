@@ -50,7 +50,6 @@ C.ApplicationWindow {
     property int sourceDockWidth: Theme.wSourceDock
     property int inspectorWidth: Theme.wInspector
     property int filmstripHeight: Theme.hFilmstrip
-    property bool shortcutsVisible: false
     // Develop viewer: the canvas behind the picture (dark | black | grey | light)
     // and lights out, which leaves the picture alone on black until Escape.
     property string viewerBackground: "dark"
@@ -713,37 +712,6 @@ C.ApplicationWindow {
         }
     }
 
-    // ── shortcut sheet ──────────────────────────────────────────────────
-    Rectangle {
-        anchors.fill: parent
-        visible: win.shortcutsVisible
-        color: Theme.scrim
-        TapHandler { onTapped: win.shortcutsVisible = false }
-        Rectangle {
-            anchors.centerIn: parent
-            width: 520; height: sheet.implicitHeight + Theme.s5 * 2
-            color: Theme.panelRaised
-            border.width: Theme.hairline; border.color: Theme.borderStrong
-            radius: Theme.rMenu
-            Column {
-                id: sheet
-                anchors.centerIn: parent
-                width: parent.width - Theme.s5 * 2
-                spacing: Theme.s1
-                Text { text: qsTr("Keyboard"); font.family: Theme.fontFamily; font.pixelSize: Theme.fsTitle; font.weight: Theme.wHeading; color: Theme.textPrimary; bottomPadding: Theme.s2 }
-                Repeater {
-                    model: win.shortcutTable.filter(e => !e.hidden).concat(win.holdKeyTable).filter(e => win.keysFor(e.id || "", e.keys) !== "")
-                    Row {
-                        required property var modelData
-                        spacing: Theme.s3
-                        Text { width: 160; text: win.keysFor(modelData.id || "", modelData.keys); font.family: Theme.monoFamily; font.pixelSize: Theme.fsLabel; color: Theme.accent; elide: Text.ElideRight }
-                        Text { text: modelData.label + (modelData.group !== qsTr("General") ? "  ·  " + modelData.group : ""); font.family: Theme.fontFamily; font.pixelSize: Theme.fsLabel; color: Theme.textSecondary }
-                    }
-                }
-            }
-        }
-    }
-
     // ── shortcuts ───────────────────────────────────────────────────────
     // One table drives the bindings, the cheat sheet and the editor. An
     // entry: id, default keys, label, group, action; `always` fires even
@@ -761,8 +729,7 @@ C.ApplicationWindow {
         { id: "palette", keys: "Ctrl+K", label: qsTr("Command search"), group: qsTr("General"), action: () => commandPalette.open() },
         { id: "help", keys: "F1", label: qsTr("Help for the current workspace"), group: qsTr("General"), always: true, action: () => win.help() },
         { id: "paletteAlt", keys: "Ctrl+Shift+P", label: qsTr("Command search"), group: qsTr("General"), hidden: true, action: () => commandPalette.open() },
-        { id: "cheatSheet", keys: "?", label: qsTr("Keyboard cheat sheet"), group: qsTr("General"), action: () => win.shortcutsVisible = !win.shortcutsVisible },
-        { id: "cheatSheetAlt", keys: "Shift+/", label: qsTr("Keyboard cheat sheet"), group: qsTr("General"), hidden: true, action: () => win.shortcutsVisible = !win.shortcutsVisible },
+        { id: "cheatSheet", keys: "?", label: qsTr("Keyboard shortcuts"), group: qsTr("General"), action: () => win.editShortcuts() },
         { id: "quit", keys: "Ctrl+Q", label: qsTr("Quit"), group: qsTr("General"), always: true, action: () => win.close() },
         { id: "grid", keys: "G", label: qsTr("Grid"), group: qsTr("Library"), action: () => win.showPhotos("grid") },
         { id: "list", keys: "L", label: qsTr("List"), group: qsTr("Library"), action: () => win.browserMode = "list" },
@@ -831,16 +798,20 @@ C.ApplicationWindow {
         Item {
             id: holder
             required property var modelData
+            readonly property string binding: win.keysFor(modelData.id, modelData.keys)
             Shortcut {
-                sequence: win.keysFor(holder.modelData.id, holder.modelData.keys)
+                // Some Wayland layouts retain Shift on the question-mark
+                // key event. Keep both forms on the same configurable action.
+                sequences: holder.modelData.id === "cheatSheet" && holder.binding === "?"
+                    ? ["?", "Shift+?"] : [holder.binding]
                 context: Qt.ApplicationShortcut
-                enabled: sequence !== "" && win.shortcutEnabled(holder.modelData)
+                enabled: holder.binding !== "" && win.shortcutEnabled(holder.modelData)
                 onActivated: holder.modelData.action()
             }
         }
     }
     // A text field keeps its own Escape (clear, then let go of the focus).
-    Shortcut { sequence: "Escape"; context: Qt.ApplicationShortcut; enabled: !win.typing; onActivated: { if (win.shortcutsVisible) win.shortcutsVisible = false; else if (shortcutsDialog.visible) shortcutsDialog.close(); else if (win.lightsOut) win.lightsOut = false; else if (win.workspace === "Develop" && engine.scopeExpanded) engine.scopeExpanded = false; else if (win.workspace === "Develop" && engine.cropMode) engine.cropMode = false; else if (win.workspace === "Develop" && developWs.leaveTool()) {} else if (win.libraryBrowsing) libraryWs.showPhotos("grid"); else if (win.browserMode === "loupe") win.browserMode = "grid" } }
+    Shortcut { sequence: "Escape"; context: Qt.ApplicationShortcut; enabled: !win.typing && !titleBar.menuOpen && !commandPalette.visible && !shortcutsDialog.visible && !helpDialog.visible; onActivated: { if (win.lightsOut) win.lightsOut = false; else if (win.workspace === "Develop" && engine.scopeExpanded) engine.scopeExpanded = false; else if (win.workspace === "Develop" && engine.cropMode) engine.cropMode = false; else if (win.workspace === "Develop" && developWs.leaveTool()) {} else if (win.libraryBrowsing) libraryWs.showPhotos("grid"); else if (win.browserMode === "loupe") win.browserMode = "grid" } }
 
     // Hold to peek: a tap toggles the view, a press held past 300 ms shows
     // it only while the key is down. Keys arrive from the application

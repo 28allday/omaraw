@@ -13,7 +13,8 @@ case "$architecture" in
     fingerprint=3E80CA1A8B89F69CBA57D98A76A5EF9054449A5C
     keyring=archlinux
     strip=1
-    mirror='https://geo.mirror.pkgbuild.com/$repo/os/$arch'
+    # Match the repositories available to Omarchy stable installations.
+    mirror='https://stable-mirror.omarchy.org/$repo/os/$arch'
     ;;
   aarch64)
     rootfs_url=https://fl.us.mirror.archlinuxarm.org/os/ArchLinuxARM-aarch64-latest.tar.gz
@@ -50,6 +51,7 @@ gpg --batch --homedir "$work/keys" --status-fd 1 --verify "$work/rootfs.sig" "$w
 awk -v key="$fingerprint" '$1 == "[GNUPG:]" && $2 == "VALIDSIG" && ($3 == key || $NF == key) {ok=1} END {exit !ok}' "$output/logs/rootfs-signature.txt"
 sha256sum "$work/rootfs.tar" > "$output/logs/rootfs-sha256.txt"
 sudo tar --extract --file "$work/rootfs.tar" --directory "$rootfs" --strip-components="$strip" --numeric-owner
+sudo chown root:root "$rootfs"
 sudo mkdir -p "$rootfs/work/source" "$rootfs/work/report"
 # Export only tracked files. Recreate minimal Git metadata for the package
 # snapshot; no checkout credentials, host files or private development tools.
@@ -62,7 +64,11 @@ nspawn=(sudo systemd-nspawn --directory="$rootfs" --register=no --console=pipe
 "${nspawn[@]}" /bin/bash -euc '
   pacman-key --init
   pacman-key --populate "$1"
-  pacman -Syu --needed --noconfirm base-devel git python python-pip imagemagick
+  # The bootstrap can be newer than the Omarchy snapshot. Downgrade it too,
+  # inside this disposable root only, before compiling against its libraries.
+  pacman -Syuu --needed --noconfirm base-devel git python python-pip imagemagick
+  pacman -Q > /work/report/build-packages.txt
+  cp /etc/pacman.d/mirrorlist /work/report/build-mirrorlist.txt
   useradd --create-home --uid 2000 builder
   printf "builder ALL=(ALL) NOPASSWD: /usr/bin/pacman\n" > /etc/sudoers.d/omaraw-builder
   chmod 440 /etc/sudoers.d/omaraw-builder
@@ -86,6 +92,8 @@ sudo cp "$work/source.bundle" "$rootfs/work/source.bundle"
 "${nspawn[@]}" /bin/bash -euc '
   package=(/work/source/build-package/omaraw-*.pkg.tar.zst)
   test "${#package[@]}" = 1
+  # Exercise coexistence with the standalone engine, not just a clean root.
+  pacman -S --needed --noconfirm darktable
   pacman -U --noconfirm "${package[0]}"
   pacman -Q > /work/report/system-packages.txt
   cd /work/source/build-package

@@ -6,6 +6,7 @@ import QtQuick.Controls as C
 // in a right-aligned column so a column of hints stays scannable.
 C.Menu {
     id: root
+    focus: true
 
     implicitWidth: 220
     property real slideOffset: 0

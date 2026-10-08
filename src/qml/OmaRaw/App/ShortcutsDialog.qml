@@ -9,25 +9,31 @@ import OmaRaw.Ui
 // settings; menus keep showing the defaults.
 C.Popup {
     id: root
+    objectName: "shortcutsDialog"
     property var shell: null
     property string filter: ""
     property string capturing: ""     // the id being rebound, "" when none
     modal: true
+    focus: true
+    closePolicy: C.Popup.CloseOnEscape | C.Popup.CloseOnPressOutside
     parent: C.Overlay.overlay
     anchors.centerIn: parent
-    width: 640; height: Math.min(parent ? parent.height - 80 : 600, 620); padding: Theme.s4
+    width: Math.min(800, parent ? parent.width - 32 : 800)
+    height: Math.min(parent ? parent.height - 32 : 600, 720); padding: Theme.s4
     background: Rectangle { color: Theme.panelRaised; border.width: Theme.hairline; border.color: Theme.borderStrong; radius: Theme.rMenu }
-    onOpened: { filter = ""; capturing = ""; searchField.forceActiveFocus() }
+    onOpened: { searchField.text = ""; filter = ""; capturing = ""; searchField.focusInput() }
     onClosed: capturing = ""
 
-    readonly property var entries: shell ? shell.shortcutTable.filter(e => !e.hidden) : []
-    function keysOf(e) { return shell.keysFor(e.id, e.keys) }
+    readonly property var entries: shell ? shell.shortcutTable.filter(e => !e.hidden).concat(
+        shell.holdKeyTable.map(e => ({ id: "hold:" + e.keys, keys: e.keys, label: e.label, group: e.group, readOnly: true }))) : []
+    function keysOf(e) { return shell && !e.readOnly ? shell.keysFor(e.id, e.keys) : e.keys }
     // Same keys in the same place: two globals, or a scoped one against a global.
     function conflictOf(e) {
+        if (e.readOnly) return ""
         const k = keysOf(e)
         if (k === "") return ""
         for (const o of entries) {
-            if (o.id === e.id || keysOf(o) !== k) continue
+            if (o.readOnly || o.id === e.id || keysOf(o) !== k) continue
             if (!e.scope || !o.scope || e.scope === o.scope) return o.label
         }
         return ""
@@ -68,6 +74,9 @@ C.Popup {
                 id: searchField
                 width: parent.width - resetAll.width - Theme.s2
                 placeholder: qsTr("Search shortcuts")
+                objectName: "shortcutsSearch"
+                clearOnEscape: false
+                onEscapePressed: root.close()
                 tip: qsTr("Find an action by name or by its current keys.")
                 onTextChanged: root.filter = text
                 onCleared: root.filter = ""
@@ -90,7 +99,7 @@ C.Popup {
                         id: row
                         required property var modelData
                         required property int index
-                        width: parent.width; height: Theme.hRow + Theme.s1
+                        width: parent.width; height: Math.max(Theme.hRow + Theme.s1, caption.implicitHeight + Theme.s2)
                         readonly property string keys: root.keysOf(modelData)
                         readonly property string conflict: root.conflictOf(modelData)
                         readonly property bool overridden: backend.shortcutOverrides[modelData.id] !== undefined
@@ -103,10 +112,11 @@ C.Popup {
                         }
                         Text {
                             anchors.left: parent.left; anchors.leftMargin: 90
+                            id: caption
                             anchors.right: keyBox.left; anchors.rightMargin: Theme.s2
                             anchors.verticalCenter: parent.verticalCenter
                             text: row.modelData.label + (row.conflict !== "" ? qsTr("  — also %1").arg(row.conflict) : "")
-                            elide: Text.ElideRight
+                            wrapMode: Text.WordWrap
                             font.family: Theme.fontFamily; font.pixelSize: Theme.fsControl
                             color: row.conflict !== "" ? Theme.danger : Theme.textSecondary
                         }
@@ -128,10 +138,10 @@ C.Popup {
                             HoverHandler { id: keyHover }
                             Tooltip {
                                 text: row.modelData.label
-                                description: qsTr("Click, then press the new keys. Backspace removes the shortcut; Escape cancels.") + (row.conflict ? qsTr("\nThese keys are also assigned to %1.").arg(row.conflict) : "")
+                                description: row.modelData.readOnly ? qsTr("Hold this key while viewing a photo. Hold keys cannot be reassigned.") : qsTr("Click, then press the new keys. Backspace removes the shortcut; Escape cancels.") + (row.conflict ? qsTr("\nThese keys are also assigned to %1.").arg(row.conflict) : "")
                                 visible: keyHover.hovered && root.capturing === ""
                             }
-                            TapHandler { onTapped: { root.capturing = row.modelData.id; catcher.forceActiveFocus() } }
+                            TapHandler { enabled: !row.modelData.readOnly; onTapped: { root.capturing = row.modelData.id; catcher.forceActiveFocus() } }
                             Accessible.role: Accessible.Button
                             Accessible.name: qsTr("Shortcut for %1: %2").arg(row.modelData.label).arg(row.keys === "" ? qsTr("unbound") : row.keys)
                         }

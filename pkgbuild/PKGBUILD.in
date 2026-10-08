@@ -2,7 +2,7 @@
 # bin/package snapshots the app and fills its checksum in this template.
 
 pkgname=omaraw
-pkgver=0.1.0beta7
+pkgver=0.1.0beta9
 pkgrel=1
 url='https://github.com/28allday/omaraw'
 pkgdesc='Catalog, cull, develop and export photographs'
@@ -14,7 +14,7 @@ depends=(
   'glibc' 'libgcc' 'libstdc++' 'libgomp' 'qt6-base' 'qt6-declarative' 'qt6-imageformats' 'qt6-svg'
   'qt6-multimedia' 'qt6-multimedia-ffmpeg'
   'libraw' 'exiv2' 'libgphoto2' 'libheif' 'lcms2' 'opencolorio>=2.5' 'lensfun' 'sqlite'
-  'glib2' 'gtk3' 'libxml2' 'potrace' 'openexr>=3.5' 'imath' 'libjxl' 'libwebp'
+  'glib2' 'gtk3' 'libxml2' 'potrace' 'openexr' 'imath' 'libjxl' 'libwebp'
   'libavif' 'librsvg' 'pugixml' 'json-glib' 'curl' 'libjpeg-turbo' 'libpng'
   'libtiff' 'zlib' 'opencv' 'openjpeg2' 'hicolor-icon-theme'
   'xdg-desktop-portal' 'libplacebo' 'vulkan-icd-loader'
@@ -201,8 +201,28 @@ check() {
   desktop-file-validate "$srcdir/omaraw-$pkgver/pkgbuild/omaraw.desktop"
 }
 
+_record_runtime_dependencies() {
+  # Record the libraries actually used by this architecture's builder.
+  # Omarchy x86 and Omarchy Mac need not carry the same OpenEXR ABI.
+  # OpenEXR's own dependency may omit OpenJPH's required minimum version.
+  local dependency version index
+  for dependency in openexr openjph; do
+    if version=$(pacman -Q "$dependency" 2>/dev/null); then
+      for index in "${!depends[@]}"; do
+        [[ ${depends[index]} != "$dependency" ]] || unset 'depends[index]'
+      done
+      depends+=("$dependency>=${version#* }")
+    elif [[ $dependency == openexr ]]; then
+      error 'Cannot determine the OpenEXR version used by this build'
+      return 1
+    fi
+  done
+}
+
 package() {
   local app="$srcdir/omaraw-$pkgver"
+  # Keep runtime detection outside makepkg's static package-variable parser.
+  _record_runtime_dependencies
   cp -a --no-preserve=ownership "$srcdir/ai-stage/." "$pkgdir/"
   install -Dm755 "$srcdir/app-build/omaraw" "$pkgdir/usr/bin/omaraw"
   install -d "$pkgdir$_prefix/lib" "$pkgdir$_prefix/share"

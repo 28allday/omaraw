@@ -36,6 +36,7 @@ C.Popup {
     }
 
     modal: true
+    focus: true
     x: Math.round((parent.width - width) / 2)
     y: Math.round(parent.height * 0.14)
     width: Math.min(560, parent.width - Theme.s4 * 2)
@@ -83,6 +84,8 @@ C.Popup {
             placeholder: qsTr("Type a command…")
             tip: qsTr("Search menu commands by name. Use the arrow keys to choose one and Return to run it; dimmed commands are unavailable in the current selection or workspace.")
             live: false
+            clearOnEscape: false
+            onEscapePressed: root.close()
             onAccepted: root.runCurrent()
             Keys.onDownPressed: list.currentIndex = Math.min(list.count - 1, list.currentIndex + 1)
             Keys.onUpPressed: list.currentIndex = Math.max(0, list.currentIndex - 1)

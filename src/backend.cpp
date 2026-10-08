@@ -24,6 +24,7 @@
 
 #include <QBuffer>
 #include <QCoreApplication>
+#include <QQuickWindow>
 #include <QSqlQuery>
 #include <QSqlError>
 #include <QSaveFile>
@@ -103,7 +104,7 @@ Backend::Backend(QObject *parent) : QObject(parent), m_catalog(catalogConnection
     });
     m_importRefresh.setSingleShot(true);
     m_importRefresh.setInterval(200);
-    connect(&m_importRefresh, &QTimer::timeout, this, &Backend::refresh);
+    connect(&m_importRefresh, &QTimer::timeout, this, [this] { refresh(); });
     connect(&m_importer, &Importer::assetsCommitted, this, [this] {
         // Only refresh committed rows. Coalesce bursts without restarting
         // the timer indefinitely during a continuous stream of copies.
@@ -1236,6 +1237,10 @@ QString Backend::currentFilename() const {
 }
 
 QString Backend::version() const { return QStringLiteral(OMARAW_VERSION); }
+bool Backend::softwareInterface() const {
+    return QQuickWindow::graphicsApi() == QSGRendererInterface::Software
+        || QQuickWindow::sceneGraphBackend() == QStringLiteral("software");
+}
 
 // ── filter/sort ─────────────────────────────────────────────────────────
 
@@ -1331,7 +1336,7 @@ QString Backend::sourceWhere(QVariantList &binds) const {
     return where.isEmpty() ? own : own + QStringLiteral(" AND ") + where;
 }
 
-void Backend::refresh() {
+void Backend::refresh(bool preservePosition) {
     if (!m_catalog.isOpen()) { m_browseWhere.clear(); m_browseBinds.clear(); m_model.setIds({}); return; }
     QVariantList binds;
     QString where = sourceWhere(binds);
@@ -1350,20 +1355,35 @@ void Backend::refresh() {
     if (m_aiFocusId && m_catalog.asset(m_aiFocusId).id && !ids.contains(m_aiFocusId))
         ids.prepend(m_aiFocusId);
     m_browseWhere = where; m_browseBinds = binds;
+    const QSet<int> visible(ids.cbegin(), ids.cend());
+    int replacement = ids.isEmpty() ? 0 : ids.first();
+    if (preservePosition && m_currentId && !visible.contains(m_currentId)) {
+        // Find the next survivor in the previous order, including when a
+        // whole selection was flagged. At the end, use the previous survivor.
+        const int row = m_model.rowOf(m_currentId);
+        replacement = 0;
+        for (int i = row + 1; i < m_model.rowCount() && !replacement; ++i)
+            if (visible.contains(m_model.idAt(i))) replacement = m_model.idAt(i);
+        for (int i = row - 1; i >= 0 && !replacement; --i)
+            if (visible.contains(m_model.idAt(i))) replacement = m_model.idAt(i);
+        if (!replacement && !ids.isEmpty()) replacement = ids.first();
+    }
     m_model.setIds(ids);
     // Drop selection entries that left the view; keep current if visible.
     QSet<int> keep;
     for (int id : ids) if (m_selection.contains(id)) keep.insert(id);
-    const bool selChanged = keep.size() != m_selection.size() || (m_currentId && !ids.contains(m_currentId));
+    const bool selChanged = keep.size() != m_selection.size() || (m_currentId && !visible.contains(m_currentId));
     m_selection = keep;
-    if (m_currentId && !ids.contains(m_currentId)) m_currentId = 0;
+    if (m_currentId && !visible.contains(m_currentId)) m_currentId = 0;
     if (!m_currentId && !ids.isEmpty() && m_selection.isEmpty()) {
-        m_currentId = ids.first();
+        m_currentId = replacement;
         m_selection.insert(m_currentId);
         m_anchorId = m_currentId;
         m_model.selectionChanged({m_currentId});
         emit selectionChanged();
     } else if (selChanged) {
+        if (!m_currentId)
+            for (int id : ids) if (m_selection.contains(id)) { m_currentId = id; m_anchorId = id; break; }
         emit selectionChanged();
     }
     refreshCounts();
@@ -1975,6 +1995,13 @@ QVector<int> Backend::targets(int id) const {
 
 // ── culling ─────────────────────────────────────────────────────────────
 
+void Backend::refreshAfterCull(int id) {
+    const int previous = m_currentId;
+    refresh(true);
+    // Filtering already advanced off a photo that left the view.
+    if (m_currentId == previous) advanceAfterCull(id);
+}
+
 void Backend::setRating(int rating, int id) {
     const QVector<int> t = targets(id);
     if (t.isEmpty()) return;
@@ -1983,7 +2010,7 @@ void Backend::setRating(int rating, int id) {
     m_model.invalidate(t);
     emit selectionChanged();
     setStatus(rating ? tr("%1 star%2").arg(rating).arg(rating == 1 ? "" : "s") : tr("Unrated"));
-    advanceAfterCull(id);
+    refreshAfterCull(id);
 }
 
 void Backend::setFlag(int flag, int id) {
@@ -1993,9 +2020,7 @@ void Backend::setFlag(int flag, int id) {
     m_model.invalidate(t);
     emit selectionChanged();
     setStatus(flag > 0 ? tr("Picked") : flag < 0 ? tr("Rejected") : tr("Unflagged"));
-    if (flag < 0 && m_sourceKind != QLatin1String("rejected")) refresh();   // the reject leaves the view; the next photo takes its row
-    else advanceAfterCull(id);
-    emit catalogChanged();
+    refreshAfterCull(id);
 }
 
 void Backend::toggleFlag(int flag, int id) {
@@ -2012,8 +2037,7 @@ void Backend::setLabel(const QString &label, int id) {
     syncSidecars(t);
     m_model.invalidate(t);
     emit selectionChanged();
-    if (!m_filterLabel.isEmpty()) refresh();
-    else advanceAfterCull(id);
+    refreshAfterCull(id);
 }
 
 void Backend::toggleLabel(const QString &label, int id) {

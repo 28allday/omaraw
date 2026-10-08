@@ -21,6 +21,12 @@ env = dict(PATH="/usr/bin", LANG="C.UTF-8",
            QT_QPA_PLATFORM="offscreen", QT_QUICK_BACKEND="software",
            OMA_GPU="cpu", OMA_GPU_UI="software", OMP_NUM_THREADS="2", OMP_THREAD_LIMIT="2")
 machine = {"x86_64": 62, "aarch64": 183}[platform.machine()]
+# The private patched engine must win even when standalone darktable exists.
+dynamic = subprocess.check_output(["readelf", "-d", "/usr/bin/omaraw"], env=env, text=True)
+runpath = re.search(r"\((?:RUNPATH|RPATH)\).*\[(.*?)\]", dynamic)
+assert runpath and runpath[1].split(":")[0] == "/usr/lib/omaraw/engine/lib/darktable", dynamic
+resolved = subprocess.check_output(["ldd", "/usr/bin/omaraw"], env=env, text=True)
+assert re.search(r"libdarktable\.so => /usr/lib/omaraw/engine/lib/darktable/libdarktable\.so\s", resolved), resolved
 elf_count = 0
 for path in [Path("/usr/bin/omaraw"), *Path("/usr/lib/omaraw").rglob("*")]:
     if not path.is_file() or path.is_symlink():

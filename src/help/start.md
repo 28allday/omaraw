@@ -5,7 +5,7 @@ OmaRAW is a photography library, a RAW developer, a tethered capture desk and an
 When you reopen a catalog, OmaRAW returns to the last selected photo or variant, with its collection, filters and sort order. The filmstrip brings that photo into view. Each catalog remembers its own place. If the photo has been removed, a remaining photo is selected; offline originals stay selected.
 
 The launch screen shows your OmaRAW version, a looping Spectrum animation and
-a photographer's quote. Click **OK** or press **Enter** to open the program.
+a photographer's quote. Click **Continue** or press **Enter** to open the program.
 Close the screen or press **Escape** to quit. The quote changes between launches
 and works offline; click the photographer's name to visit its source. You can
 pause the animation, and the Reduced motion preference uses a still image.
@@ -25,10 +25,10 @@ The four workspaces sit across the top: Ctrl+1 Library, Ctrl+2 Develop, Ctrl+3 C
 
 ## Finding your way
 
-- **Help**: press F1 anywhere for this window opened at the current workspace, or click the ? in a panel header for that panel's page.
+- **Help**: press F1 anywhere for this window opened at the current workspace, or click the ? in a panel header for that panel's page. Use **A−** and **A+** to change the reading size, and **Expand** to fill the application window. Your reading size is remembered.
 - **Tooltips**: rest the pointer on a control, menu command or status-bar item for an explanation. Adjustment sliders say what moving them changes.
 - **Command search** (Ctrl+K): type the name of any menu item and press Return. Hover a result for the same explanation as its menu entry; dimmed results are unavailable for the current selection or workspace.
-- **Keyboard cheat sheet** (?): every shortcut on one sheet. Edit ▸ Preferences ▸ Keyboard changes them.
+- **Keyboard shortcuts** (?): search all shortcuts and change their keys in one window. Escape closes it, as it does command search and menus.
 
 ## Where things live
 

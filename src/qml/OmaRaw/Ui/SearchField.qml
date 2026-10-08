@@ -13,6 +13,8 @@ Rectangle {
     // Search-as-you-type is the default; set false where a query is expensive
     // and should wait for Return.
     property bool live: true
+    property bool clearOnEscape: true
+    signal escapePressed()
     // One sentence on what to type here.
     property string tip: ""
 
@@ -79,7 +81,9 @@ Rectangle {
         onTextChanged: if (root.live) root.accepted(text)
         onAccepted: root.accepted(text)
         Keys.onEscapePressed: {
-            if (text !== "") {
+            if (!root.clearOnEscape) {
+                root.escapePressed()
+            } else if (text !== "") {
                 text = ""
                 root.cleared()
             } else {

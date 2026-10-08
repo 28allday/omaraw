@@ -142,8 +142,8 @@ Item {
         const ticks = event.angleDelta.y ? event.angleDelta.y / 120 : event.pixelDelta.y / 30
         if (ticks !== 0) root.nudge(ticks > 0 ? 1 : -1, event.modifiers & Qt.ShiftModifier)
     }
-    WheelHandler { acceptedModifiers: Qt.ControlModifier; enabled: root.enabled; onWheel: event => root.wheelStep(event) }
-    WheelHandler { acceptedModifiers: Qt.ControlModifier | Qt.ShiftModifier; enabled: root.enabled; onWheel: event => root.wheelStep(event) }
+    WheelHandler { acceptedModifiers: Qt.ControlModifier; acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad; enabled: root.enabled; onWheel: event => root.wheelStep(event) }
+    WheelHandler { acceptedModifiers: Qt.ControlModifier | Qt.ShiftModifier; acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad; enabled: root.enabled; onWheel: event => root.wheelStep(event) }
     implicitWidth: labelWidth + 160 + Theme.s2 * 2
     HoverHandler { id: rowHover }
     opacity: enabled ? 1.0 : Theme.disabledOpacity
