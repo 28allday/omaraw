@@ -122,10 +122,12 @@ Item {
         }
 
         Keys.onPressed: event => {
-            if (event.key === Qt.Key_Right) { backend.step(1); event.accepted = true }
-            else if (event.key === Qt.Key_Left) { backend.step(-1); event.accepted = true }
-            else if (event.key === Qt.Key_Down) { backend.step(root.columns); event.accepted = true }
-            else if (event.key === Qt.Key_Up) { backend.step(-root.columns); event.accepted = true }
+            // Shift extends the selection from the anchor instead of replacing it.
+            const move = (event.modifiers & Qt.ShiftModifier) ? d => backend.extendSelection(d) : d => backend.step(d)
+            if (event.key === Qt.Key_Right) { move(1); event.accepted = true }
+            else if (event.key === Qt.Key_Left) { move(-1); event.accepted = true }
+            else if (event.key === Qt.Key_Down) { move(root.columns); event.accepted = true }
+            else if (event.key === Qt.Key_Up) { move(-root.columns); event.accepted = true }
             else if (event.key === Qt.Key_Home) { backend.selectRow(0); event.accepted = true }
             else if (event.key === Qt.Key_End) { backend.selectRow(assets.count - 1); event.accepted = true }
         }

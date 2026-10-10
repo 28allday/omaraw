@@ -20,12 +20,17 @@ link_skill() {
   fi
 }
 
+# A system library newer than this build would stop OmaRAW starting.
+libraries_match() {
+  [ ! -x /usr/lib/omaraw/check-libraries ] || /usr/lib/omaraw/check-libraries
+}
+
 post_install() {
-  link_skill
+  if libraries_match; then link_skill; fi
 }
 
 post_upgrade() {
-  link_skill
+  if libraries_match; then link_skill; fi
 }
 
 post_remove() {

@@ -27,6 +27,7 @@ struct ImportOptions {
     bool hashDuplicates = false;                  // …or the same checksum, whatever its name: every file is read once more
     QString backup;                               // a second copy of every imported file lands here too ("" = none), same subfolders and names
     bool eject = false;                           // power the source's card or drive off when the import is done
+    int autoStackSeconds = 0;                     // shots within this many seconds of the previous become a stack (0 = off)
     QVariantMap metadata;                         // explicit values for new catalog rows only; keywords are additive
     bool recursive = true;
     // An explicit empty selection means import nothing, never the whole folder.

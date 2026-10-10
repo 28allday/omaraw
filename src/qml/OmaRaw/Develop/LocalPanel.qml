@@ -107,11 +107,34 @@ Column {
             tip: qsTr("Click or drag over a colour, such as skin, to create a mask. No drawing is needed.")
             onClicked: root.develop.startColourRange(true)
         }
+        ToolButton {
+            id: luminosityButton
+            objectName: "newLuminosityMask"; iconName: "sun"; text: qsTr("Luminosity"); showLabel: true
+            enabled: engine.imageId >= 0 && !engine.busy && root.develop !== null
+            checked: root.develop && root.develop.pickChannel === 4
+            tip: qsTr("A mask by brightness: highlights, midtones, shadows or a tone you pick. No drawing is needed.")
+            onClicked: luminosityMenu.visible ? luminosityMenu.close() : luminosityMenu.popup(luminosityButton, 0, luminosityButton.height)
+            ContextMenu {
+                id: luminosityMenu
+                objectName: "luminosityMenu"
+                MenuAction { objectName: "luminosityHighlights"; text: qsTr("Highlights"); onTriggered: { engine.addLuminosityMask("highlights"); engine.maskShown = true } }
+                MenuAction { objectName: "luminosityMidtones"; text: qsTr("Midtones"); onTriggered: { engine.addLuminosityMask("midtones"); engine.maskShown = true } }
+                MenuAction { objectName: "luminosityShadows"; text: qsTr("Shadows"); onTriggered: { engine.addLuminosityMask("shadows"); engine.maskShown = true } }
+                MenuAction { objectName: "luminosityPick"; text: qsTr("Pick a Tone…"); iconName: "pipette"; onTriggered: root.develop.startLuminosityPick() }
+            }
+        }
         ToolButton { iconName: "circle-dot"; text: qsTr("Radial"); showLabel: true; tip: qsTr("A new local adjustment under an ellipse; drag it into place on the picture."); enabled: engine.imageId >= 0; onClicked: { root.prepareShape(); engine.addLocal(1) } }
         ToolButton { iconName: "diff"; text: qsTr("Gradient"); showLabel: true; tip: qsTr("A new local adjustment fading in across a line; drag it into place on the picture."); enabled: engine.imageId >= 0; onClicked: { root.prepareShape(); engine.addLocal(2) } }
         ToolButton { objectName: "newPenMask"; iconName: "pen-tool"; text: qsTr("Pen"); showLabel: true; checked: root.develop && root.develop.penMode; enabled: engine.imageId >= 0 && root.develop !== null; tip: qsTr("Draw your own mask. Click for corners, drag for curves, then click the first point to close."); onClicked: root.develop.startPen(true) }
     }
     AiPanel { kind: "mask"; develop: root.develop; compact: true }
+    Text {
+        objectName: "luminosityPickHint"
+        visible: root.develop && root.develop.pickChannel === 4
+        x: Theme.s3; width: parent.width - Theme.s3 * 2; wrapMode: Text.WordWrap
+        text: qsTr("Click or drag over the brightness to select. Escape cancels.")
+        color: Theme.textPrimary; font.family: Theme.fontFamily; font.pixelSize: Theme.fsLabel
+    }
     Text {
         objectName: "colourRangePickHint"
         visible: root.develop && root.develop.pickChannel === 3
@@ -181,9 +204,16 @@ Column {
             StableList { id: rangeList; source: item.live.ranges }
             readonly property bool active: engine.activeLocal === live.priority
             readonly property bool radial: live.shape === 1
-            property string section: live.shapes.length === 0 ? "range" : "tone"
-            property bool advancedRanges: false
+            readonly property var lumaRange: (live.ranges || []).find(r => r.channel === 0) || ({})
             readonly property var hueRange: (live.ranges || []).find(r => r.channel === 1) || ({})
+            // A luminosity mask: no shapes, selected by brightness and not by colour.
+            readonly property bool luminosity: live.shapes.length === 0 && lumaRange.active === true && hueRange.active !== true
+            readonly property real lumaFrom: lumaRange.active ? 100 * lumaRange.p1 : 0
+            readonly property real lumaTo: lumaRange.active ? 100 * lumaRange.p2 : 100
+            readonly property real lumaSoftness: lumaRange.active ? 100 * Math.max(lumaRange.p1 - lumaRange.p0, lumaRange.p3 - lumaRange.p2) : 15
+            function setLuminosity(from, to, softness, inverse) { engine.setLuminosityRange(from / 100, to / 100, softness / 100, inverse) }
+            property string section: luminosity ? "luminosity" : live.shapes.length === 0 ? "range" : "tone"
+            property bool advancedRanges: false
             readonly property real hueWidth: hueRange.active ? 360 * (hueRange.inverse ? 1 - hueRange.p3 + hueRange.p0 : hueRange.p2 - hueRange.p1) : 360
             readonly property real hueSoftness: hueRange.active ? 180 * (hueRange.p1 - hueRange.p0 + hueRange.p3 - hueRange.p2) : 9
             property bool renaming: false
@@ -205,7 +235,7 @@ Column {
                 Icon {
                     anchors.left: parent.left; anchors.leftMargin: Theme.s3
                     anchors.verticalCenter: parent.verticalCenter
-                    name: item.live.shapes.length === 0 ? "pipette" : item.radial ? "circle-dot" : item.live.shape === 4 ? "pen-tool" : "diff"; size: 13; color: item.active ? Theme.accent : Theme.textMuted
+                    name: item.luminosity ? "sun" : item.live.shapes.length === 0 ? "pipette" : item.radial ? "circle-dot" : item.live.shape === 4 ? "pen-tool" : "diff"; size: 13; color: item.active ? Theme.accent : Theme.textMuted
                 }
                 Text {
                     visible: !item.renaming
@@ -258,6 +288,40 @@ Column {
                 visible: item.active
                 width: parent.width
                 spacing: Theme.s1
+                AccordionHeader {
+                    objectName: "maskSection_luminosity"; width: parent.width; text: qsTr("Luminosity range")
+                    visible: item.luminosity
+                    open: item.section === "luminosity"
+                    onClicked: item.section = open ? "" : "luminosity"
+                }
+                Column {
+                    objectName: "maskControls_luminosity"; width: parent.width; spacing: Theme.s1
+                    visible: item.luminosity && item.section === "luminosity"
+                    SliderField {
+                        objectName: "luminosityFrom"; x: Theme.s3; width: parent.width - Theme.s3 * 2
+                        label: qsTr("From"); from: 0; to: 100; stepSize: 1; decimals: 0; value: item.lumaFrom
+                        tip: qsTr("The darkest tone fully in the mask. 0 includes the deepest shadows.")
+                        onEditingFinished: v => item.setLuminosity(Math.min(v, item.lumaTo), item.lumaTo, item.lumaSoftness, item.lumaRange.inverse === true)
+                    }
+                    SliderField {
+                        objectName: "luminosityTo"; x: Theme.s3; width: parent.width - Theme.s3 * 2
+                        label: qsTr("To"); from: 0; to: 100; stepSize: 1; decimals: 0; value: item.lumaTo
+                        tip: qsTr("The brightest tone fully in the mask. 100 includes the brightest highlights.")
+                        onEditingFinished: v => item.setLuminosity(item.lumaFrom, Math.max(v, item.lumaFrom), item.lumaSoftness, item.lumaRange.inverse === true)
+                    }
+                    SliderField {
+                        objectName: "luminositySoftness"; x: Theme.s3; width: parent.width - Theme.s3 * 2
+                        label: qsTr("Softness"); from: 0; to: 50; stepSize: 1; decimals: 0; value: item.lumaSoftness
+                        tip: qsTr("Fade the mask gently into the neighbouring tones.")
+                        onEditingFinished: v => item.setLuminosity(item.lumaFrom, item.lumaTo, v, item.lumaRange.inverse === true)
+                    }
+                    CheckField {
+                        objectName: "luminosityInvert"; x: Theme.s3
+                        text: qsTr("Invert"); checked: item.lumaRange.inverse === true
+                        tip: qsTr("Select every tone except this range.")
+                        onClicked: item.setLuminosity(item.lumaFrom, item.lumaTo, item.lumaSoftness, checked)
+                    }
+                }
                 AccordionHeader {
                     objectName: "maskSection_range"; width: parent.width; text: qsTr("Colour range")
                     open: item.section === "range"

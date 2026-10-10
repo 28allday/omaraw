@@ -36,6 +36,25 @@ if [[ $(uname -m) == aarch64 ]]; then
     SOURCES[$index]=$target
   done
 fi
+# A second x86 build against current Arch can link a newer OpenEXR than the
+# Omarchy stable build. Name it by that OpenEXR series so one release can carry
+# both and the installer can choose the package that loads on each system.
+if [[ ${OMARAW_NAME_OPENEXR:-} == 1 ]]; then
+  openexr=$(pacman -Q openexr | awk '{print $2}')
+  series=openexr$(cut -d. -f1,2 <<< "${openexr#*:}")
+  for index in "${!BUILT[@]}"; do
+    file=${BUILT[$index]}
+    target=${file/.pkg.tar/-$series.pkg.tar}
+    mv -- "$file" "$target"
+    BUILT[$index]=$target
+  done
+  for index in "${!SOURCES[@]}"; do
+    file=${SOURCES[$index]}
+    target=${file/.src.tar/-$series.src.tar}
+    mv -- "$file" "$target"
+    SOURCES[$index]=$target
+  done
+fi
 ARTEFACTS=()
 for file in "${BUILT[@]}" "${SOURCES[@]}"; do
   if [[ $(dirname -- "$file") == "$PWD" ]]; then ARTEFACTS+=("$(basename -- "$file")"); else ARTEFACTS+=("$file"); fi

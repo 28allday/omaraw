@@ -14,14 +14,23 @@ concurrency:
 
 jobs:
   package:
-    name: Arch package (${{ matrix.arch }})
+    name: Arch package (${{ matrix.arch }}${{ matrix.suffix && ', current Arch' || '' }})
     strategy:
       fail-fast: false
       matrix:
         include:
           - arch: x86_64
+            repositories: omarchy
+            suffix: ''
+            runner: ubuntu-24.04
+          # Omarchy edge follows current Arch, whose libraries can be newer.
+          - arch: x86_64
+            repositories: current
+            suffix: -current
             runner: ubuntu-24.04
           - arch: aarch64
+            repositories: omarchy
+            suffix: ''
             runner: ubuntu-24.04-arm
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 120
@@ -37,19 +46,19 @@ jobs:
           sudo apt-get install -y --no-install-recommends systemd-container curl gnupg ca-certificates zstd
           sudo apt-get clean
       - name: Build and validate the native package
-        run: bash tools/ci-package.sh '${{ matrix.arch }}'
+        run: bash tools/ci-package.sh '${{ matrix.arch }}' '${{ matrix.repositories }}'
       - name: Upload build and validation logs
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: package-logs-${{ matrix.arch }}-${{ github.run_id }}
+          name: package-logs-${{ matrix.arch }}${{ matrix.suffix }}-${{ github.run_id }}
           path: dist/logs/
           retention-days: 7
           if-no-files-found: warn
       - name: Upload verified package candidate and complete sources
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: omaraw-${{ matrix.arch }}-${{ github.sha }}
+          name: omaraw-${{ matrix.arch }}${{ matrix.suffix }}-${{ github.sha }}
           path: dist/packages/
           retention-days: 7
           compression-level: 0

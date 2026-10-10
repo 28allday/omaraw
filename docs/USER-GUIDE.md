@@ -104,8 +104,9 @@ The left panel has **Library** and **Browse** tabs. Library shows your catalog; 
 
 Click a photo to select it. Hold **Ctrl** while clicking to add or remove
 individual photos. Click the first photo, then **Shift-click** the last to
-select the range between them. These controls work in Grid, Detail list and
-the Filmstrip. **Ctrl+A** selects every photo in the current view;
+select the range between them. **Shift+Left** and **Shift+Right** extend the
+selection one photo at a time; in the grid, **Shift+Up** and **Shift+Down** extend
+it a row. These controls work in Grid, Detail list and the Filmstrip. **Ctrl+A** selects every photo in the current view;
 **Ctrl+D** clears the selection. Selected photos have an accent-coloured border.
 
 ### Albums
@@ -246,6 +247,13 @@ Right-click any preset ▸ Auto-apply on import… and say which photos get it: 
 
 An XMP sidecar beside a photo supplies its rating, colour label, keywords, title, caption, creator and copyright on import, and its edit: OmaRAW's own exactly, or the source editor's converted as a starting point. A RAW's sidecar uses the photo's base name (DSC_0833.NEF → DSC_0833.xmp), so other compatible editors can share it. Writing is off by default: Preferences ▸ Write metadata sidecars automatically keeps a sidecar current (metadata and edit), Library ▸ Sidecars ▸ Write Sidecars for Selection Now writes once, and Read Sidecars for Selection takes them back. Write Into DNG, JPEG and TIFF Files puts those formats' metadata inside the file. When another program has changed a sidecar, the inspector's Sidecar row lists each difference with a button to take it.
 
+### Stacking bursts
+
+Turn on **Stack bursts** and set **Within** to stack the new photos as they are
+imported: shots taken within that many seconds of the previous one become a
+stack, topped by the first shot. 1 s suits a fast burst. Photos that are already
+stacked are left alone, and you can change any stack afterwards.
+
 ### Smart Previews
 
 Enable **Build Smart Previews after import** to prepare smaller editable sources beside the catalog. Wait for the preview job to finish before disconnecting originals. You can also build or discard them later through **Library → Smart Previews**. Develop marks offline preview editing clearly; reconnect an original for full detail and export. Previews are not backups of your photos.
@@ -283,7 +291,9 @@ All of these act on one photo or the whole selection.
 
 ### Stacks
 
-Select a burst and press Ctrl+G to stack it. The grid shows the top photo with a count; S expands or collapses, Shift+S makes the current photo the top, Ctrl+Shift+G unstacks. Auto-Stack by Capture Time in the card menu groups shots taken within a chosen number of seconds.
+Select a burst and press Ctrl+G to stack it. The photo you are on (the one you last clicked or moved to) becomes the top, so choose the best shot before stacking. The grid and Filmstrip show the top photo with a count; S expands or collapses, Shift+S makes the current photo the top, Ctrl+Shift+G unstacks. In an open stack every photo is numbered, 1/5 to 5/5, and the top keeps its filled badge. The Filmstrip outlines a stack, collapsed or open, as one group.
+
+**Auto-Stack by Capture Time** (Ctrl+Alt+G, or Library ▸ Stacks) groups shots taken within a chosen number of seconds of each other: the selected photos when two or more are selected, otherwise everything shown. To stack bursts as they arrive, turn on **Stack bursts** in the Import panel.
 
 ### Variants
 
@@ -318,6 +328,7 @@ B adds the current photo or selection to the Quick Collection, a scratch set tha
 - **Rename File…** and **Move Selection to Folder…** (right-click a card, or File) act on the disk. The sidecar, variants, edits and thumbnails follow, and nothing is overwritten. Moves are journaled, so a crash half way is settled on the next start.
 - **Move to Trash** (Shift+Del) sends the files and their sidecars to the system trash. **Remove from Catalog** (Del) keeps the files where they are.
 - **Offline volumes**: folders whose drive is unplugged are greyed and their photos collect under Offline; everything comes back with the drive. Right-click a moved folder ▸ Relink Folder… to point the catalog at its new place.
+- **Removing a folder**: right-click it ▸ Remove from Catalog… takes the folder, its subfolders and their photos out of the catalog, edits included. The files stay on disk; import the folder again to bring them back.
 - **Smart Previews** (Library ▸ Smart Previews) save smaller editable sources beside the catalog. Build them before disconnecting a drive, or enable building after import. The inspector shows their size. Develop switches back when the original returns. Export needs the original or a full offline copy. Discard previews when a matching full source is available; edits stay saved.
 - **Offline originals** (Library ▸ Offline Originals) keep verified full-quality working copies for the selection, so you can develop and export with the drive disconnected.
 - **Relink**: an offline photo's inspector offers Locate… and Search a folder…, which finds every offline photo under a folder by name, size and capture time.
@@ -1017,8 +1028,8 @@ Corrections appear in the preview and each is one undoable history step. Automat
 
 Adjust part of the photo in **Develop → Masks**. Each mask has six folding
 sections: **Colour range**, **Colour**, **Tone**, **Detail**, **Shapes & overlay**
-and **Edge refinement**. One section opens at a time; all existing controls
-remain available.
+and **Edge refinement**; a luminosity mask adds **Luminosity range**. One
+section opens at a time; all existing controls remain available.
 
 ### Select a colour, such as skin
 
@@ -1054,6 +1065,24 @@ The original Luminance, Hue and Colour bands, pipettes, inversion, From, To and
 Falloff controls are still there. Use **Tone** for exposure, black, contrast,
 highlights and shadows; **Detail** for clarity, sharpness and colour moiré.
 
+
+### Select by brightness: luminosity masks
+
+1. Choose **Luminosity**, then **Highlights**, **Midtones** or **Shadows**. The
+   mask covers that range of tones across the whole picture, with no drawing,
+   and shows its coverage. **Pick a Tone…** instead makes the mask around the
+   brightness you click or drag over; Escape cancels.
+2. Under **Luminosity range**, **From** and **To** set the darkest and brightest
+   tones fully in the mask, on a scale of 0 to 100; **Softness** fades it into
+   the tones either side. From at 0 always includes the deepest shadows, and To
+   at 100 the brightest highlights. **Invert** selects every tone except the range.
+3. Open **Tone**, **Colour** or **Detail** and adjust. For example, lower
+   **Exposure** on Highlights to hold a bright sky, or add **Warmth** to Shadows.
+
+Brightness is measured on the scene's light, before tone mapping and the
+tone curve, so those do not move the mask. To limit it to one
+area, add a radial or pen shape in **Shapes & overlay**; to limit it to one
+colour, use **Sample colour…** under **Colour range**.
 
 ### AI object masks
 

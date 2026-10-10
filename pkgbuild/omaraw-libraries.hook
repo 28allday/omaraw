@@ -1,0 +1,13 @@
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Operation = Remove
+Type = Path
+Target = usr/lib/*.so*
+Target = !usr/lib/omaraw/*
+
+[Action]
+Description = Checking OmaRAW still matches the system libraries...
+When = PostTransaction
+# A warning only: a library update must never fail the system update.
+Exec = /bin/sh -c '[ ! -x /usr/lib/omaraw/check-libraries ] || /usr/lib/omaraw/check-libraries || true'

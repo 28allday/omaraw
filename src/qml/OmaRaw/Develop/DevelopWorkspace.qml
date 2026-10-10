@@ -38,6 +38,14 @@ Item {
         colourRangeNew = newMask; wbPickMode = false; pickChannel = 3
         viewer.focusRangePicker()
     }
+    // Luminosity: the next click or drag on the picture makes a new mask
+    // around the brightness there.
+    function startLuminosityPick() {
+        if (pickChannel === 4) { pickChannel = -1; return }
+        if (engine.ai.mode !== "") engine.ai.cancel()
+        wbPickMode = false; pickChannel = 4
+        viewer.focusRangePicker()
+    }
     // White balance picker: the next click on the picture is a neutral.
     property bool wbPickMode: false
     // Retouch: the tool and size the next placed spot gets, and whether a

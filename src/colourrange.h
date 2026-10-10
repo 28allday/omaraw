@@ -19,4 +19,18 @@ inline Band hue(double centre, double width, double softness) {
     }
     return {false, std::max(0.0, centre-half-fade), centre-half, centre+half, std::min(1.0, centre+half+fade)};
 }
+// A brightness band for a luminosity mask: fully selected from `from` to
+// `to`, fading over `softness` either side. An end at 0 or 1 stays hard, so
+// the deepest shadows and the brightest highlights are always included.
+inline Band luminance(double from, double to, double softness) {
+    from = std::clamp(from, 0.0, 1.0); to = std::clamp(to, from, 1.0);
+    const double fade = std::clamp(softness, 0.0, 1.0);
+    return {false, from <= 0 ? 0.0 : std::max(0.0, from - fade), from, to, to >= 1 ? 1.0 : std::min(1.0, to + fade)};
+}
+// Luminosity presets in the range's own units: scene light under a 2.2
+// curve, so mid grey sits near 0.46.
+struct LuminosityPreset { const char *key; double from, to, softness; };
+inline constexpr LuminosityPreset luminosityPresets[] = {
+    {"highlights", 0.65, 1.0, 0.15}, {"midtones", 0.35, 0.60, 0.15}, {"shadows", 0.0, 0.30, 0.15},
+};
 }

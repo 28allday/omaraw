@@ -506,7 +506,7 @@ Rectangle {
             objectName: "localRangePicker"
             x: img.x; y: img.y; width: img.width; height: img.height
             enabled: root.maskVisualsShown && root.localToolsActive && root.pickChannel >= 0 && view.hasImage
-                     && (engine.activeLocal >= 0 || (root.pickChannel === 3 && root.colourRangeNew)) && !root.cropMode && !engine.busy && engine.ai.mode === ""
+                     && (engine.activeLocal >= 0 || (root.pickChannel === 3 && root.colourRangeNew) || root.pickChannel === 4) && !root.cropMode && !engine.busy && engine.ai.mode === ""
             visible: enabled
             cursorShape: Qt.CrossCursor
             preventStealing: true
@@ -518,11 +518,14 @@ Rectangle {
                 if (root.pickChannel === 3) {
                     engine.pickColourRange(start.x / width, start.y / height, mouse.x / width, mouse.y / height, root.colourRangeNew)
                     engine.maskShown = true
+                } else if (root.pickChannel === 4) {
+                    engine.pickLuminosity(start.x / width, start.y / height, mouse.x / width, mouse.y / height)
+                    engine.maskShown = true
                 } else engine.pickRange(root.pickChannel, Math.max(0, Math.min(1, mouse.x / width)), Math.max(0, Math.min(1, mouse.y / height)))
                 root.picked()
             }
             Rectangle {
-                visible: rangePicker.pressed && root.pickChannel === 3
+                visible: rangePicker.pressed && (root.pickChannel === 3 || root.pickChannel === 4)
                 x: Math.min(rangePicker.start.x, rangePicker.mouseX); y: Math.min(rangePicker.start.y, rangePicker.mouseY)
                 width: Math.abs(rangePicker.mouseX-rangePicker.start.x); height: Math.abs(rangePicker.mouseY-rangePicker.start.y)
                 color: "#224080ff"; border.color: "white"; border.width: 1

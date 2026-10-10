@@ -98,6 +98,9 @@ public:
     // a new location, e.g. after a drive moved. Fails when the new path
     // is already catalogued elsewhere.
     bool relinkFolder(int id, const QString &newAbsPath);
+    // Takes a folder, its subfolders and every photo under them out of the
+    // catalog in one transaction. Like removeAssets, never touches the disk.
+    bool removeFolder(int id);
     // One file renamed or moved: every variant's row follows (path, filename,
     // folder). The folder is created in the catalog when new.
     bool movePath(const QString &oldPath, const QString &newPath);
@@ -269,6 +272,7 @@ private:
     bool repairAiImports();
     bool exec(const QString &sql);
     int folderIdFor(const QString &absPath) const;
+    bool deleteAssetRows(const QVector<int> &ids); // inside a caller's transaction
 
     QString m_connection;
     QString m_path;

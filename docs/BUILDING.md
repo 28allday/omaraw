@@ -64,10 +64,23 @@ a candidate. Validation includes fully decoded exports in all seven formats,
 loading the five bundled AI models, a real editable AI selection and GUI startup
 with networking disabled. Hosted runners do not qualify Apple GPU behavior.
 
-The x86 builder synchronises the entire disposable root with Omarchy's stable
-mirror, including downgrades from a newer bootstrap. The ARM builder uses the
+The main x86 builder synchronises the entire disposable root with Omarchy's
+stable mirror, including downgrades from a newer bootstrap. A second x86 job
+builds against current Arch, as used by Omarchy edge, whose libraries can be a
+newer series. Its package and complete-source names add that OpenEXR series,
+such as `-openexr3.5`, so both x86 packages can be attached to one release; the
+installer chooses the one matching the system's OpenEXR. The ARM builder uses the
 Arch Linux ARM repositories used by Omarchy Mac. Package dependencies record
-the OpenEXR and OpenJPH versions used by each builder. Validation also installs
+the OpenEXR, OpenJPH and Imath versions used by each builder, as minimums only:
+an upper bound would block users' whole system update whenever a repository
+moves to a newer library series. Instead the package installs
+`/usr/lib/omaraw/check-libraries` and a pacman hook that runs it after any
+transaction changing a system library, and after OmaRAW is installed or
+upgraded. If OmaRAW's libraries are missing it prints how to install the
+matching build; it never fails the transaction. The **Library watch** workflow
+compares the latest release with each builder's repositories daily and opens
+an issue when one has moved to a series no release package was built for, so a
+rebuilt release can follow. Validation also installs
 standalone darktable and checks that OmaRAW still loads its own private engine.
 Repository URLs and package versions are retained with the build logs.
 
@@ -77,7 +90,9 @@ Combine the two verified checksum manifests when preparing that release.
 The workflow explicitly selects `.pkg.tar.zst` binaries and `.src.tar.gz` sources,
 so Arch Linux ARM's different default compression cannot change asset names.
 The installer selects the matching architecture; a release without that asset
-fails without installing a different architecture's package.
+fails without installing a different architecture's package. A release without
+an x86 package for the system's OpenEXR series falls back to the main x86
+package, which pacman then accepts or refuses on its dependencies.
 
 Build success does not change the licences of bundled code or data. Retain the
 [third-party notices](../THIRD_PARTY.md) when distributing modified versions.

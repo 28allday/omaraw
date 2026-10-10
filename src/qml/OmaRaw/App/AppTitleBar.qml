@@ -182,7 +182,7 @@ Rectangle {
                 SMenuItem { text: backend.isStackExpanded(root.shell.currentInfo.stackId || 0) ? qsTr("Collapse Stack") : qsTr("Expand Stack"); shortcut: "S"; enabled: (root.shell.currentInfo.stackCount || 0) > 1; onTriggered: backend.toggleStack(backend.currentId) }
                 SMenuItem { text: qsTr("Set as Stack Top"); shortcut: "Shift+S"; enabled: (root.shell.currentInfo.stackPos || 0) > 0; onTriggered: backend.setStackTop(backend.currentId) }
                 MenuSep {}
-                SMenuItem { text: qsTr("Auto-Stack by Capture Time…"); onTriggered: root.shell.autoStackPhotos() }
+                SMenuItem { text: qsTr("Auto-Stack by Capture Time…"); shortcut: "Ctrl+Alt+G"; onTriggered: root.shell.autoStackPhotos() }
             }
             MenuSep {}
             StyledMenu {

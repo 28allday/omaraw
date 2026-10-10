@@ -18,6 +18,7 @@ InspectorGroup 1.0 InspectorGroup.qml
 InspectorRow 1.0 InspectorRow.qml
 HistogramView 1.0 HistogramView.qml
 Filmstrip 1.0 Filmstrip.qml
+StackBadge 1.0 StackBadge.qml
 CompareView 1.0 CompareView.qml
 SurveyView 1.0 SurveyView.qml
 ImportWorkspace 1.0 ImportWorkspace.qml

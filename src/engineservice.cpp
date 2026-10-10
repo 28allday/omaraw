@@ -1024,6 +1024,57 @@ public slots:
         Q_UNUSED(imgid) Q_UNUSED(priority) Q_UNUSED(x) Q_UNUSED(y) Q_UNUSED(x2) Q_UNUSED(y2) Q_UNUSED(newLocal)
 #endif
     }
+    // A luminosity mask: a whole-picture local selected by brightness alone.
+    void addLuminosityLocal(int imgid, double from, double to, double softness, const QString &name) {
+#ifdef OMARAW_ENGINE
+        const int priority = oma_engine_local_add(imgid, "exposure", 1, .5f, .5f, .2f, .1f, 0);
+        if (priority < 0) { emit failed(QString::fromUtf8(oma_engine_error())); return; }
+        const auto band = ColourRange::luminance(from, to, softness);
+        if (oma_engine_range_set(imgid, "exposure", priority, 0, 1, 0, band.p0, band.p1, band.p2, band.p3)
+            || oma_engine_shape_remove(imgid, "exposure", priority, 0)
+            || oma_engine_local_rename(imgid, "exposure", priority, name.toUtf8().constData())) {
+            const QString error = QString::fromUtf8(oma_engine_error());
+            oma_engine_local_remove(imgid, "exposure", priority);
+            emit failed(error);
+        } else emit localAdded(imgid, priority);
+        emit localsRead(imgid, readLocals(imgid));
+#else
+        Q_UNUSED(imgid) Q_UNUSED(from) Q_UNUSED(to) Q_UNUSED(softness) Q_UNUSED(name)
+#endif
+    }
+    // A luminosity mask around the brightness under a click or drag.
+    void pickLuminosity(int imgid, double x, double y, double x2, double y2, const QString &name) {
+#ifdef OMARAW_ENGINE
+        const int priority = oma_engine_local_add(imgid, "exposure", 1, .5f, .5f, .2f, .1f, 0);
+        if (priority < 0) { emit failed(QString::fromUtf8(oma_engine_error())); return; }
+        float value = 0, spread = 0;
+        QString error;
+        if (oma_engine_pick_range_area(imgid, priority, 0, x, y, x2, y2, &value, &spread)) error = QString::fromUtf8(oma_engine_error());
+        if (error.isEmpty()) {
+            const double half = qMax(.08, double(spread) * 1.5);
+            const auto band = ColourRange::luminance(double(value) - half, double(value) + half, .1);
+            if (oma_engine_range_set(imgid, "exposure", priority, 0, 1, 0, band.p0, band.p1, band.p2, band.p3)
+                || oma_engine_shape_remove(imgid, "exposure", priority, 0)
+                || oma_engine_local_rename(imgid, "exposure", priority, name.toUtf8().constData()))
+                error = QString::fromUtf8(oma_engine_error());
+        }
+        if (!error.isEmpty()) { oma_engine_local_remove(imgid, "exposure", priority); emit failed(error); }
+        else emit localAdded(imgid, priority);
+        emit localsRead(imgid, readLocals(imgid));
+#else
+        Q_UNUSED(imgid) Q_UNUSED(x) Q_UNUSED(y) Q_UNUSED(x2) Q_UNUSED(y2) Q_UNUSED(name)
+#endif
+    }
+    void setLuminosityRange(int imgid, int priority, double from, double to, double softness, bool inverse) {
+#ifdef OMARAW_ENGINE
+        const auto band = ColourRange::luminance(from, to, softness);
+        if (oma_engine_range_set(imgid, "exposure", priority, 0, 1, inverse ? 1 : 0, band.p0, band.p1, band.p2, band.p3))
+            emit failed(QString::fromUtf8(oma_engine_error()));
+        emit localsRead(imgid, readLocals(imgid));
+#else
+        Q_UNUSED(imgid) Q_UNUSED(priority) Q_UNUSED(from) Q_UNUSED(to) Q_UNUSED(softness) Q_UNUSED(inverse)
+#endif
+    }
     void setColourRange(int imgid, int priority, double width, double softness) {
 #ifdef OMARAW_ENGINE
         oma_range_info old{};
@@ -5451,6 +5502,43 @@ void EngineService::setColourRange(double width, double softness) {
     m_dirty = true;
     QMetaObject::invokeMethod(m_worker, "setColourRange", Qt::QueuedConnection, Q_ARG(int, m_imgid), Q_ARG(int, m_activeLocal),
         Q_ARG(double, qBound(1.,width,360.)), Q_ARG(double, qBound(0.,softness,90.)));
+    refresh(); requestRender();
+}
+
+void EngineService::addLuminosityMask(const QString &preset) {
+    if (m_imgid < 0 || busy()) return;
+    for (const auto &p : ColourRange::luminosityPresets) {
+        if (preset != QLatin1String(p.key)) continue;
+        const QString name = preset == QLatin1String("highlights") ? tr("Highlights")
+                           : preset == QLatin1String("midtones") ? tr("Midtones") : tr("Shadows");
+        editBoundary(); beginUndoGroup();
+        const auto grouped = qScopeGuard([this] { endUndoGroup(); });
+        m_dirty = true;
+        QMetaObject::invokeMethod(m_worker, "addLuminosityLocal", Qt::QueuedConnection, Q_ARG(int, m_imgid),
+            Q_ARG(double, p.from), Q_ARG(double, p.to), Q_ARG(double, p.softness), Q_ARG(QString, name));
+        refresh(); requestRender(true);
+        return;
+    }
+}
+
+void EngineService::pickLuminosity(double x, double y, double x2, double y2) {
+    if (m_imgid < 0 || busy() || !std::isfinite(x) || !std::isfinite(y) || !std::isfinite(x2) || !std::isfinite(y2)) return;
+    editBoundary(); beginUndoGroup();
+    const auto grouped = qScopeGuard([this] { endUndoGroup(); });
+    m_dirty = true;
+    QMetaObject::invokeMethod(m_worker, "pickLuminosity", Qt::QueuedConnection, Q_ARG(int, m_imgid),
+        Q_ARG(double, qBound(0.,x,1.)), Q_ARG(double, qBound(0.,y,1.)), Q_ARG(double, qBound(0.,x2,1.)), Q_ARG(double, qBound(0.,y2,1.)),
+        Q_ARG(QString, tr("Luminosity")));
+    refresh(); requestRender(true);
+}
+
+void EngineService::setLuminosityRange(double from, double to, double softness, bool inverse) {
+    if (m_imgid < 0 || m_activeLocal < 0 || !std::isfinite(from) || !std::isfinite(to) || !std::isfinite(softness)) return;
+    editBoundary(); beginUndoGroup();
+    const auto grouped = qScopeGuard([this] { endUndoGroup(); });
+    m_dirty = true;
+    QMetaObject::invokeMethod(m_worker, "setLuminosityRange", Qt::QueuedConnection, Q_ARG(int, m_imgid), Q_ARG(int, m_activeLocal),
+        Q_ARG(double, from), Q_ARG(double, to), Q_ARG(double, softness), Q_ARG(bool, inverse));
     refresh(); requestRender();
 }
 

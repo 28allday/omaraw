@@ -618,7 +618,9 @@ C.ApplicationWindow {
             Text { text: qsTr("Auto-stack by capture time"); font.family: Theme.fontFamily; font.pixelSize: Theme.fsHeading; font.weight: Theme.wHeading; color: Theme.textPrimary }
             Text {
                 width: parent.width; wrapMode: Text.WordWrap
-                text: qsTr("Shots in %1 taken within this many seconds of the previous one become a stack. Stacked photos are left alone.").arg(backend.sourceTitle)
+                text: backend.selectedCount > 1
+                      ? qsTr("Of the %1 selected photos, shots taken within this many seconds of the previous one become a stack. Stacked photos are left alone.").arg(backend.selectedCount)
+                      : qsTr("Shots in %1 taken within this many seconds of the previous one become a stack. Stacked photos are left alone.").arg(backend.sourceTitle)
                 textFormat: Text.PlainText   // names and filenames are not markup
                 font.family: Theme.fontFamily; font.pixelSize: Theme.fsLabel; color: Theme.textMuted
             }
@@ -738,6 +740,8 @@ C.ApplicationWindow {
         { id: "survey", keys: "N", label: qsTr("Survey"), group: qsTr("Library"), action: () => win.browserMode = "survey" },
         { id: "next", keys: "Right", label: qsTr("Next photo"), group: qsTr("Library"), action: () => libraryWs.stepPhoto(1) },
         { id: "previous", keys: "Left", label: qsTr("Previous photo"), group: qsTr("Library"), action: () => libraryWs.stepPhoto(-1) },
+        { id: "extendNext", keys: "Shift+Right", label: qsTr("Add the next photo to the selection"), group: qsTr("Library"), when: () => !libraryWs.reviewing, action: () => backend.extendSelection(1) },
+        { id: "extendPrevious", keys: "Shift+Left", label: qsTr("Add the previous photo to the selection"), group: qsTr("Library"), when: () => !libraryWs.reviewing, action: () => backend.extendSelection(-1) },
         { id: "selectAll", keys: "Ctrl+A", label: qsTr("Select all"), group: qsTr("Library"), action: () => win.selectAllPhotos(true) },
         { id: "selectNone", keys: "Ctrl+D", label: qsTr("Select none"), group: qsTr("Library"), action: () => win.selectAllPhotos(false) },
         { id: "cardsBigger", keys: "Ctrl++", label: qsTr("Larger thumbnails"), group: qsTr("Library"), always: true, action: () => win.cardSize = Math.min(Theme.szCardMax, win.cardSize + 40) },
@@ -747,6 +751,7 @@ C.ApplicationWindow {
         { id: "unstack", keys: "Ctrl+Shift+G", label: qsTr("Unstack"), group: qsTr("Library"), action: () => backend.unstackSelection() },
         { id: "toggleStack", keys: "S", label: qsTr("Expand or collapse stack"), group: qsTr("Library"), action: () => backend.toggleStack(backend.currentId) },
         { id: "stackTop", keys: "Shift+S", label: qsTr("Set stack top"), group: qsTr("Library"), action: () => backend.setStackTop(backend.currentId) },
+        { id: "autoStack", keys: "Ctrl+Alt+G", label: qsTr("Auto-stack by capture time"), group: qsTr("Library"), action: () => win.autoStackPhotos() },
         { id: "quickCollection", keys: "B", label: qsTr("Add to Quick Collection"), group: qsTr("Library"), action: () => backend.addSelectionToQuickCollection() },
         { id: "albumEarlier", keys: "Ctrl+Left", label: qsTr("Move earlier in the album"), group: qsTr("Library"), when: () => backend.customOrderAvailable, action: () => backend.moveInAlbum(-1) },
         { id: "albumLater", keys: "Ctrl+Right", label: qsTr("Move later in the album"), group: qsTr("Library"), when: () => backend.customOrderAvailable, action: () => backend.moveInAlbum(1) },
