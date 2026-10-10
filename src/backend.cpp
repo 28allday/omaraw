@@ -812,11 +812,11 @@ void Backend::revealLicences() const {
     QDesktopServices::openUrl(QUrl::fromLocalFile(path));
 }
 
-QString Backend::documentationPathFor(const QString &binDir) {
+QString Backend::documentationPathFor(const QString &binDir, const QString &systemDir) {
     // Installed: the guide sits beside the binary the way the notices do.
     const QDir bin(binDir);
-    for (const QString &candidate : {bin.absoluteFilePath(QStringLiteral("../share/doc/omaraw")), QStringLiteral("/usr/share/doc/omaraw")})
-        if (QFileInfo(candidate + QStringLiteral("/USER-GUIDE.md")).isFile()) return QDir(candidate).canonicalPath();
+    const QString beside = bin.absoluteFilePath(QStringLiteral("../share/doc/omaraw"));
+    if (QFileInfo(beside + QStringLiteral("/USER-GUIDE.md")).isFile()) return QDir(beside).canonicalPath();
     // Run from a build tree: the manual is in the source it was built from.
     // Walk up, and look into each sibling, which covers a build directory
     // beside the sources and the unpacked source of a package build.
@@ -838,6 +838,9 @@ QString Backend::documentationPathFor(const QString &binDir) {
         }
         if (!up.cdUp()) break;
     }
+    // Last, a system-wide package's guide. A build tree's own manual wins, so a
+    // development build never shows an older installed release's guide.
+    if (!systemDir.isEmpty() && QFileInfo(systemDir + QStringLiteral("/USER-GUIDE.md")).isFile()) return QDir(systemDir).canonicalPath();
     return QString();
 }
 

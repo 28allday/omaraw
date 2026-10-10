@@ -262,7 +262,8 @@ public:
     // The installed documentation: the user guide and the help pages.
     // The lookup is a pure function of where the binary sits, so it can be
     // tested against a layout rather than against this machine.
-    static QString documentationPathFor(const QString &binDir);
+    // `systemDir` is where a system-wide package keeps the guide; tests pass their own.
+    static QString documentationPathFor(const QString &binDir, const QString &systemDir = QStringLiteral("/usr/share/doc/omaraw"));
     Q_INVOKABLE QString documentationPath() const;
     Q_INVOKABLE void revealDocumentation() const;
     // The in-app help: sections in reading order (id, title, group) and a page as Markdown.
