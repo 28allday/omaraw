@@ -1,0 +1,5 @@
+kind = "app"
+name = "OmaRAW"
+categories = ["Graphics", "Photography"]
+icon = "assets/omaraw.svg"
+screenshots = ["docs/screenshots/develop.png"]
