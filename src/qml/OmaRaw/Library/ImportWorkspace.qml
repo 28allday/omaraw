@@ -24,6 +24,9 @@ Item {
     AutoTagSettings { id: tagSettings }
     property string backup: ""
     property bool eject: false
+    // Shots within this many seconds of the previous become a stack; 0 = off.
+    property int autoStackSeconds: 0
+    property int autoStackLast: 1
     property var metadata: ({})
     readonly property bool removable: folder !== "" && backend.isRemovableSource(folder)
     readonly property bool inPlace: mode === "add"
@@ -94,6 +97,8 @@ Item {
         smartPreviews = o.smartPreviews === true
         backup = o.backup || ""
         eject = o.eject === true
+        autoStackSeconds = Math.max(0, Math.min(120, o.autoStackSeconds || 0))
+        if (autoStackSeconds > 0) autoStackLast = autoStackSeconds
         metadata = o.metadata || ({})
         recursive = o.recursive !== false
         prefixField.text = prefix
@@ -104,7 +109,7 @@ Item {
     function run() {
         if (!ready) return
         importError = ""
-        const started = backend.importFolderWith(folder, { selectedFiles: browser.selectedPaths(), recursive: recursive, mode: mode, destination: destination, subfolder: subfolder, rename: rename, prefix: prefix, skipDuplicates: skipDuplicates, hashDuplicates: hashDuplicates, backup: backup, eject: eject && removable, metadata: metadata, smartPreviews: smartPreviews, autoTag: backend.autoTagEnabled })
+        const started = backend.importFolderWith(folder, { selectedFiles: browser.selectedPaths(), recursive: recursive, mode: mode, destination: destination, subfolder: subfolder, rename: rename, prefix: prefix, skipDuplicates: skipDuplicates, hashDuplicates: hashDuplicates, backup: backup, eject: eject && removable, metadata: metadata, smartPreviews: smartPreviews, autoTag: backend.autoTagEnabled, autoStackSeconds: autoStackSeconds })
         if (started) ownImport = true
         else importError = backend.statusMessage
     }
@@ -291,6 +296,18 @@ Item {
               Toggle { objectName: "importAutoTag"; width: parent.width; anchors.verticalCenter: parent.verticalCenter; label: qsTr("Automatically tag imported photos"); tip: qsTr("Tag new imports locally on the CPU. Off stops scanning and keeps existing tags. Choose collections in Tagging settings."); checkable: false; checked: backend.autoTagEnabled; onClicked: backend.autoTagEnabled = !backend.autoTagEnabled }
           }
           ToolButton { objectName: "importAutoTagSettings"; text: qsTr("Tagging settings…"); showLabel: true; onClicked: tagSettings.open() }
+          Item { width: parent.width; height: Theme.hControl + Theme.s1
+              Toggle { objectName: "importAutoStack"; width: parent.width; anchors.verticalCenter: parent.verticalCenter; label: qsTr("Stack bursts"); tip: qsTr("Shots taken within a few seconds of the previous one become a stack, topped by the first shot."); checkable: false; checked: root.autoStackSeconds > 0; onClicked: root.autoStackSeconds = root.autoStackSeconds > 0 ? 0 : root.autoStackLast }
+          }
+          SliderField {
+              objectName: "importAutoStackSeconds"; width: parent.width
+              visible: root.autoStackSeconds > 0
+              label: qsTr("Within"); from: 1; to: 30; stepSize: 1; decimals: 0; suffix: qsTr(" s")
+              value: Math.max(1, root.autoStackSeconds)
+              tip: qsTr("How close in time two shots must be to join the same stack.")
+              onEdited: v => { root.autoStackSeconds = v; root.autoStackLast = v }
+              onEditingFinished: v => { root.autoStackSeconds = v; root.autoStackLast = v }
+          }
           FieldRow {
               label: qsTr("Second copy")
               Text {

@@ -173,33 +173,9 @@ Rectangle {
                 }
             }
         }
-        // stack badge: the top of a collapsed stack says how many it holds;
-        // members of an expanded stack carry a small marker
-        Rectangle {
+        StackBadge {
             anchors.right: parent.right; anchors.top: parent.top; anchors.margins: Theme.s1
-            visible: root.stackCount > 1
-            width: srow.implicitWidth + Theme.s2; height: 16
-            radius: Theme.rControl
-            color: root.stackPos === 0 && !root.stackExpanded ? Theme.accent : Theme.scrim
-            Row {
-                id: srow
-                anchors.centerIn: parent
-                spacing: 3
-                Icon { anchors.verticalCenter: parent.verticalCenter; name: "layers"; size: 10; color: root.stackPos === 0 && !root.stackExpanded ? Theme.accentText : Theme.accent }
-                Text {
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: root.stackPos === 0 ? String(root.stackCount) : (root.stackPos + 1) + "/" + root.stackCount
-                    font.family: Theme.monoFamily; font.pixelSize: 9; font.weight: Theme.wHeading
-                    color: root.stackPos === 0 && !root.stackExpanded ? Theme.accentText : Theme.textPrimary
-                }
-            }
-            TapHandler { onTapped: backend.toggleStack(root.assetId) }
-            HoverHandler { id: stackHover }
-            Tooltip {
-                text: root.stackExpanded ? qsTr("Collapse the stack") : qsTr("Expand the stack")
-                description: qsTr("%1 photos are stacked here; the top one stands for the rest.").arg(root.stackCount)
-                visible: stackHover.hovered
-            }
+            assetId: root.assetId; stackCount: root.stackCount; stackPos: root.stackPos; expanded: root.stackExpanded
         }
         // current-item marker: a thin inner line so it reads even when
         // several cards are selected

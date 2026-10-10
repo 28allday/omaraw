@@ -96,6 +96,7 @@
         <file alias="CompareView.qml">qml/OmaRaw/Library/CompareView.qml</file>
         <file alias="CullBar.qml">qml/OmaRaw/Library/CullBar.qml</file>
         <file alias="Filmstrip.qml">qml/OmaRaw/Library/Filmstrip.qml</file>
+        <file alias="StackBadge.qml">qml/OmaRaw/Library/StackBadge.qml</file>
         <file alias="FlagMark.qml">qml/OmaRaw/Library/FlagMark.qml</file>
         <file alias="HistogramView.qml">qml/OmaRaw/Library/HistogramView.qml</file>
         <file alias="InspectorGroup.qml">qml/OmaRaw/Library/InspectorGroup.qml</file>

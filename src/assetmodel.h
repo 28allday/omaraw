@@ -37,6 +37,8 @@ public:
     const QVector<int> &ids() const { return m_ids; }
     Q_INVOKABLE int idAt(int row) const { return row >= 0 && row < m_ids.size() ? m_ids[row] : 0; }
     Q_INVOKABLE int rowOf(int id) const { return m_rows.value(id, -1); }
+    // The stack a row belongs to (0 = none): lets a strip outline a run of neighbours.
+    Q_INVOKABLE int stackIdAt(int row) const { const int id = idAt(row); return id ? record(id).stackId : 0; }
 
     // After a rating/flag/label change: drop cached records, repaint rows.
     void invalidate(const QVector<int> &ids);

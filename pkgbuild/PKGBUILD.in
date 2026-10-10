@@ -2,7 +2,7 @@
 # bin/package snapshots the app and fills its checksum in this template.
 
 pkgname=omaraw
-pkgver=0.1.0beta9
+pkgver=0.1.0beta10
 pkgrel=1
 url='https://github.com/28allday/omaraw'
 pkgdesc='Catalog, cull, develop and export photographs'
@@ -205,8 +205,10 @@ _record_runtime_dependencies() {
   # Record the libraries actually used by this architecture's builder.
   # Omarchy x86 and Omarchy Mac need not carry the same OpenEXR ABI.
   # OpenEXR's own dependency may omit OpenJPH's required minimum version.
+  # No upper bound: a newer library series must never block a system update.
+  # check-libraries reports a mismatch after installs and updates instead.
   local dependency version index
-  for dependency in openexr openjph; do
+  for dependency in openexr openjph imath; do
     if version=$(pacman -Q "$dependency" 2>/dev/null); then
       for index in "${!depends[@]}"; do
         [[ ${depends[index]} != "$dependency" ]] || unset 'depends[index]'
@@ -225,6 +227,8 @@ package() {
   _record_runtime_dependencies
   cp -a --no-preserve=ownership "$srcdir/ai-stage/." "$pkgdir/"
   install -Dm755 "$srcdir/app-build/omaraw" "$pkgdir/usr/bin/omaraw"
+  install -Dm755 "$app/pkgbuild/omaraw-check-libraries" "$pkgdir/usr/lib/omaraw/check-libraries"
+  install -Dm644 "$app/pkgbuild/omaraw-libraries.hook" "$pkgdir/usr/share/libalpm/hooks/omaraw-libraries.hook"
   install -d "$pkgdir$_prefix/lib" "$pkgdir$_prefix/share"
   cp -a --no-preserve=ownership "$srcdir/engine-stage$_prefix/lib/darktable" "$pkgdir$_prefix/lib/"
   cp -a --no-preserve=ownership "$srcdir/engine-stage$_prefix/share/darktable" "$pkgdir$_prefix/share/"

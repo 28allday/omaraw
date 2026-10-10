@@ -72,6 +72,7 @@ ImportOptions ImportOptions::fromMap(const QVariantMap &m) {
     o.eject = m.value(QStringLiteral("eject")).toBool();
     o.hashDuplicates = m.value(QStringLiteral("hashDuplicates")).toBool();
     o.autoTag = m.value(QStringLiteral("autoTag")).toBool();
+    o.autoStackSeconds = qBound(0, m.value(QStringLiteral("autoStackSeconds")).toInt(), 120);
     if (m.contains(QStringLiteral("recursive"))) o.recursive = m.value(QStringLiteral("recursive")).toBool();
     o.selectedOnly = m.contains(QStringLiteral("selectedFiles"));
     o.selectedFiles = m.value(QStringLiteral("selectedFiles")).toStringList();
@@ -84,7 +85,8 @@ ImportOptions ImportOptions::fromMap(const QVariantMap &m) {
 QVariantMap ImportOptions::toMap() const {
     return {{QStringLiteral("mode"), mode}, {QStringLiteral("destination"), destination}, {QStringLiteral("subfolder"), subfolder},
             {QStringLiteral("rename"), rename}, {QStringLiteral("prefix"), prefix}, {QStringLiteral("skipDuplicates"), skipDuplicates},
-            {QStringLiteral("backup"), backup}, {QStringLiteral("eject"), eject}, {QStringLiteral("hashDuplicates"), hashDuplicates}, {QStringLiteral("metadata"), metadata}, {QStringLiteral("recursive"), recursive}, {QStringLiteral("autoTag"), autoTag}};
+            {QStringLiteral("backup"), backup}, {QStringLiteral("eject"), eject}, {QStringLiteral("hashDuplicates"), hashDuplicates}, {QStringLiteral("metadata"), metadata}, {QStringLiteral("recursive"), recursive}, {QStringLiteral("autoTag"), autoTag},
+            {QStringLiteral("autoStackSeconds"), autoStackSeconds}};
 }
 
 QString Importer::targetPath(const ImportOptions &o, const QString &source, const QString &capturedAt, qint64 mtime, int seq) {

@@ -7,7 +7,7 @@ separately, so you can always return to the starting image.
 
 ![Developing a photograph in OmaRAW](docs/screenshots/develop.png)
 
-**Beta 9 · Omarchy x86_64 and ARM64.** Start with a small collection and keep backups
+**Beta 10 · Omarchy x86_64 and ARM64.** Start with a small collection and keep backups
 of your photographs and catalog. Camera support and tethering depend on the
 camera; GPU acceleration depends on its driver.
 
@@ -37,7 +37,10 @@ The installer downloads the beta, checks its checksum and installs its
 requirements. It also installs the agent skill described below. You do not need
 to compile the app or install its processing engine separately.
 
-The installer selects `x86_64` or `aarch64` automatically. ARM packages target
+The installer selects `x86_64` or `aarch64` automatically. Where a release also
+offers an x86 package named for a newer OpenEXR series (for example
+`…-x86_64-openexr3.5.pkg.tar.zst`, built for Omarchy edge), the installer uses it
+when your system's OpenEXR matches. ARM packages target
 Omarchy Mac on Asahi Linux; they are not macOS apps.
 On an Asahi Mac, install `vulkan-asahi` for GPU acceleration if it is missing.
 
@@ -47,10 +50,17 @@ then install:
 
 ```sh
 sha256sum --check --ignore-missing SHA256SUMS
-sudo pacman -U ./omaraw-0.1.0beta9-1-x86_64.pkg.tar.zst
+sudo pacman -U ./omaraw-0.1.0beta10-1-x86_64.pkg.tar.zst
 ```
 
-For ARM, use `omaraw-0.1.0beta9-1-aarch64.pkg.tar.zst` instead.
+For ARM, use `omaraw-0.1.0beta10-1-aarch64.pkg.tar.zst` instead. On x86, check
+`pacman -Q openexr`: if the release has a package named for that OpenEXR series,
+use it instead. After installing, pacman warns if the package does not match
+your system's libraries.
+
+If a system update later moves a library OmaRAW uses to a new series, the
+update still completes and pacman prints a warning with the command to install
+the matching OmaRAW build.
 Continue only if the package checksum reports **OK**.
 
 Packages are currently unsigned. Use the files from this repository's Releases

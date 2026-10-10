@@ -169,6 +169,14 @@ Backend::Backend(QObject *parent) : QObject(parent), m_catalog(catalogConnection
             const int n = applyPresetRules(ids);
             if (n > 0) setStatus(tr("Imported %1 photos, auto-applying presets to %2").arg(imported).arg(n));
         }
+        // Bursts in this import become stacks, as asked in the Import panel.
+        if (err.isEmpty() && imported > 0 && m_runningImportOptions.autoStackSeconds > 0) {
+            const int made = m_catalog.autoStack(m_catalog.assetIdsOfImport(importId), m_runningImportOptions.autoStackSeconds);
+            if (made > 0) {
+                setStatus(tr("Imported %1 photos and made %2 stack%3").arg(imported).arg(made).arg(made == 1 ? "" : "s"));
+                refresh();
+            }
+        }
         if (m_buildSmartAfterImport && m_engine && imported > 0) {
             QStringList paths;
             for (int id : m_catalog.assetIdsOfImport(importId)) paths << m_catalog.asset(id).path;
@@ -1948,6 +1956,13 @@ void Backend::step(int delta) {
     select(m_model.idAt(row), 0);
 }
 
+void Backend::extendSelection(int delta) {
+    if (m_model.rowCount() == 0) return;
+    const int row = m_model.rowOf(m_currentId);
+    if (row < 0 || !m_anchorId) { step(delta); return; }
+    select(m_model.idAt(qBound(0, row + delta, m_model.rowCount() - 1)), 2);
+}
+
 QVariantList Backend::selectedIds() const {
     QVariantList out;
     for (int id : m_model.ids()) if (m_selection.contains(id)) out << id;
@@ -3436,12 +3451,14 @@ void Backend::stackSelection() {
     if (t.size() < 2) { setStatus(tr("Select at least two photos to stack")); return; }
     const int stack = m_catalog.stackAssets(t);
     if (!stack) { setStatus(tr("Could not stack: %1").arg(m_catalog.lastError())); return; }
+    // The photo you are on becomes the top, so it can be chosen before stacking.
+    if (t.contains(m_currentId)) m_catalog.setStackTop(m_currentId);
     m_expandedStacks.remove(stack);
     const QVector<int> members = m_catalog.stackMembers(stack);
     m_selection = {members.first()};
     m_currentId = members.first();
     m_anchorId = m_currentId;
-    setStatus(tr("Stacked %1 photos").arg(members.size()));
+    setStatus(tr("Stacked %1 photos · top: %2").arg(members.size()).arg(m_catalog.asset(m_currentId).filename));
     refresh();
     emit selectionChanged();
 }
@@ -3460,13 +3477,20 @@ void Backend::unstackSelection() {
 }
 
 int Backend::autoStackShown(int seconds) {
-    // Over everything the source holds, not just the collapsed view.
-    QVariantList binds;
-    const QString where = sourceWhere(binds);
-    const QVector<int> ids = m_catalog.assetIds(where, binds, orderFor(QStringLiteral("captured"), false));
+    // Two or more selected photos: just those. Otherwise everything the
+    // source holds, not just the collapsed view.
+    QVector<int> ids;
+    const bool selection = m_selection.size() > 1;
+    if (selection) ids = QVector<int>(m_selection.cbegin(), m_selection.cend());
+    else {
+        QVariantList binds;
+        const QString where = sourceWhere(binds);
+        ids = m_catalog.assetIds(where, binds, orderFor(QStringLiteral("captured"), false));
+    }
     const int made = m_catalog.autoStack(ids, seconds);
     setStatus(made ? tr("Made %1 stack%2 from shots within %3 s of each other").arg(made).arg(made == 1 ? "" : "s").arg(seconds)
-                   : tr("No shots within %1 s of each other to stack").arg(seconds));
+                   : selection ? tr("No unstacked shots in the selection within %1 s of each other").arg(seconds)
+                               : tr("No shots within %1 s of each other to stack").arg(seconds));
     if (made) { refresh(); emit selectionChanged(); }
     return made;
 }
@@ -3666,6 +3690,29 @@ bool Backend::renameAlbum(int id, const QString &name) {
     if (id <= 0 || name.trimmed().isEmpty() || !m_catalog.renameAlbum(id, name.trimmed())) return false;
     if ((m_sourceKind == QLatin1String("album") || m_sourceKind == QLatin1String("smart")) && m_sourceId == id) m_sourceTitle = name.trimmed();
     emit catalogChanged(); emit sourceChanged();
+    return true;
+}
+
+bool Backend::removeFolder(int folderId) {
+    const QString path = m_catalog.folderPath(folderId);
+    if (path.isEmpty()) return false;
+    const QString shownPath = m_sourceKind == QLatin1String("folder") ? m_catalog.folderPath(m_sourceId) : QString();
+    const bool shown = shownPath == path || shownPath.startsWith(path + QLatin1Char('/'));
+    if (!m_catalog.removeFolder(folderId)) {
+        setStatus(tr("Nothing was removed from the catalog: %1").arg(m_catalog.lastError()));
+        return false;
+    }
+    m_selection.clear();
+    m_currentId = 0;
+    refreshWatches();
+    m_model.invalidateAll();
+    if (shown) setSource(QStringLiteral("all"));
+    else refresh();
+    refreshCounts();
+    emit foldersChanged();
+    emit catalogChanged();
+    emit selectionChanged();
+    setStatus(tr("Removed %1 from the catalog (files untouched)").arg(path));
     return true;
 }
 

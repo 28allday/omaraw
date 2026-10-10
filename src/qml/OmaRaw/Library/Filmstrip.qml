@@ -103,6 +103,15 @@ Rectangle {
             required property bool selected
             required property bool current
             required property int variant
+            required property int stackId
+            required property int stackPos
+            required property int stackCount
+            // A stack is outlined as one group: a collapsed one alone, an open
+            // one across each unbroken run of its members.
+            readonly property bool stacked: stackCount > 1
+            readonly property bool expanded: stackId ? backend.isStackExpanded(stackId) : false
+            readonly property bool joinsLeft: stacked && index > 0 && assets.stackIdAt(index - 1) === stackId
+            readonly property bool joinsRight: stacked && index < assets.count - 1 && assets.stackIdAt(index + 1) === stackId
             width: strip.thumbW; height: strip.height
             color: selected ? Theme.panelRaised : "transparent"
             border.width: selected ? Theme.selectionRing : 0
@@ -125,6 +134,24 @@ Rectangle {
                 visible: cell.variant > 0
                 width: 14; height: 14; radius: Theme.rControl; color: Theme.scrim
                 Icon { anchors.centerIn: parent; name: "copy"; size: 9; color: Theme.accent }
+            }
+            StackBadge {
+                anchors.right: parent.right; anchors.top: parent.top; anchors.margins: Theme.s1 + 1
+                assetId: cell.assetId; stackCount: cell.stackCount; stackPos: cell.stackPos; expanded: cell.expanded
+            }
+            Item {
+                objectName: "stackOutline_" + cell.index
+                visible: cell.stacked
+                anchors.fill: parent
+                anchors.topMargin: 1; anchors.bottomMargin: 1
+                // Bridge the gap to the next member so a run reads as one outline.
+                anchors.leftMargin: cell.joinsLeft ? 0 : 1; anchors.rightMargin: cell.joinsRight ? -strip.spacing : 1
+                readonly property real line: 1.5
+                readonly property color ink: Theme.textSecondary
+                Rectangle { width: parent.width; height: parent.line; color: parent.ink }
+                Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: parent.line; color: parent.ink }
+                Rectangle { visible: !cell.joinsLeft; width: parent.line; height: parent.height; color: parent.ink }
+                Rectangle { visible: !cell.joinsRight; anchors.right: parent.right; width: parent.line; height: parent.height; color: parent.ink }
             }
             Row {
                 anchors.bottom: parent.bottom

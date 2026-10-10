@@ -154,6 +154,41 @@ Rectangle {
         MenuAction { text: qsTr("Rescan Folders"); iconName: "refresh-cw"; onTriggered: backend.rescanFolders() }
         MenuAction { text: qsTr("Show Photos"); iconName: "images"; onTriggered: backend.setSource("folder", root.menuFolder.id) }
         MenuAction { text: qsTr("Watch for New Photos"); checkable: true; checked: root.menuFolder.watched === true; onTriggered: backend.setFolderWatched(root.menuFolder.id, !(root.menuFolder.watched === true)) }
+        MenuAction { text: qsTr("Remove from Catalog…"); iconName: "unlink"; onTriggered: removeFolderDialog.open() }
+    }
+    C.Popup {
+        id: removeFolderDialog
+        objectName: "removeFolderDialog"
+        modal: true
+        parent: C.Overlay.overlay
+        anchors.centerIn: parent
+        width: 400; padding: Theme.s4
+        background: Rectangle { color: Theme.panelRaised; border.width: Theme.hairline; border.color: Theme.borderStrong; radius: Theme.rMenu }
+        Column {
+            width: parent.width
+            spacing: Theme.s3
+            Text {
+                width: parent.width
+                text: qsTr("Remove \"%1\" from the catalog?").arg(root.menuFolder.name || "")
+                textFormat: Text.PlainText; wrapMode: Text.Wrap
+                font.family: Theme.fontFamily; font.pixelSize: Theme.fsHeading; font.weight: Theme.wHeading; color: Theme.textPrimary
+            }
+            Text {
+                width: parent.width
+                objectName: "removeFolderText"
+                text: (root.menuFolder.count || 0) === 1
+                      ? qsTr("1 photo in this folder and the folders inside it will leave the catalog, with its edits, rating, keywords and album places. The file stays on disk; import the folder again to bring it back.")
+                      : qsTr("%1 photos in this folder and the folders inside it will leave the catalog, with their edits, ratings, keywords and album places. The files stay on disk; import the folder again to bring them back.").arg(root.menuFolder.count || 0)
+                textFormat: Text.PlainText; wrapMode: Text.Wrap
+                font.family: Theme.fontFamily; font.pixelSize: Theme.fsControl; color: Theme.textSecondary
+            }
+            Row {
+                anchors.right: parent.right
+                spacing: Theme.s2
+                ToolButton { text: qsTr("Cancel"); showLabel: true; onClicked: removeFolderDialog.close() }
+                ToolButton { objectName: "removeFolderConfirm"; text: qsTr("Remove"); showLabel: true; onClicked: { backend.removeFolder(root.menuFolder.id); removeFolderDialog.close() } }
+            }
+        }
     }
     Connections {
         target: backend

@@ -23,8 +23,9 @@ The left panel has **Library** and **Browse** tabs. Library shows your catalog; 
 
 Click a photo to select it. Hold **Ctrl** while clicking to add or remove
 individual photos. Click the first photo, then **Shift-click** the last to
-select the range between them. These controls work in Grid, Detail list and
-the Filmstrip. **Ctrl+A** selects every photo in the current view;
+select the range between them. **Shift+Left** and **Shift+Right** extend the
+selection one photo at a time; in the grid, **Shift+Up** and **Shift+Down** extend
+it a row. These controls work in Grid, Detail list and the Filmstrip. **Ctrl+A** selects every photo in the current view;
 **Ctrl+D** clears the selection. Selected photos have an accent-coloured border.
 
 ## Albums

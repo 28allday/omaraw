@@ -732,20 +732,27 @@ bool Catalog::setLabel(const QVector<int> &ids, const QString &label) {
 bool Catalog::removeAssets(const QVector<int> &ids) {
     if (ids.isEmpty()) return true;
     if (!m_db.transaction()) { m_error = m_db.lastError().text(); return false; }
+    if (!deleteAssetRows(ids)) { m_db.rollback(); return false; }
+    if (!m_db.commit()) { m_error = m_db.lastError().text(); m_db.rollback(); return false; }
+    return true;
+}
+
+bool Catalog::deleteAssetRows(const QVector<int> &ids) {
+    if (ids.isEmpty()) return true;
     // Deleting a master also deletes its virtual copies, which may be in
     // other stacks. Capture every affected stack before that cascade runs.
     QSqlQuery query(m_db);
     if (!query.exec(QStringLiteral("SELECT DISTINCT stack_id FROM assets WHERE stack_id IS NOT NULL "
                                   "AND (id IN (%1) OR variant_of IN (%1))").arg(idList(ids)))) {
-        m_error = query.lastError().text(); m_db.rollback(); return false;
+        m_error = query.lastError().text(); return false;
     }
     QVector<int> stacks;
     while (query.next()) stacks << query.value(0).toInt();
     query.finish();
-    if (!exec(QStringLiteral("DELETE FROM assets WHERE id IN (%1)").arg(idList(ids)))) { m_db.rollback(); return false; }
+    if (!exec(QStringLiteral("DELETE FROM assets WHERE id IN (%1)").arg(idList(ids)))) return false;
     for (const int stack : stacks) {
         query.prepare("SELECT id FROM assets WHERE stack_id=? ORDER BY stack_pos,id"); query.addBindValue(stack);
-        if (!query.exec()) { m_error = query.lastError().text(); m_db.rollback(); return false; }
+        if (!query.exec()) { m_error = query.lastError().text(); return false; }
         QVector<int> members;
         while (query.next()) members << query.value(0).toInt();
         query.finish();
@@ -754,8 +761,35 @@ bool Catalog::removeAssets(const QVector<int> &ids) {
             const QString sql = members.size() == 1
                 ? QStringLiteral("UPDATE assets SET stack_id=NULL, stack_pos=0 WHERE id=%1").arg(members[i])
                 : QStringLiteral("UPDATE assets SET stack_pos=%1 WHERE id=%2").arg(i).arg(members[i]);
-            if (!exec(sql)) { m_db.rollback(); return false; }
+            if (!exec(sql)) return false;
         }
+    }
+    return true;
+}
+
+bool Catalog::removeFolder(int id) {
+    const QString root = folderPath(id);
+    if (root.isEmpty()) { m_error = QStringLiteral("no such folder"); return false; }
+    // Subfolders by path, as folderTree() nests them; a LIKE pattern would
+    // misread '_' and '%' in folder names.
+    QVector<int> folders;
+    QSqlQuery query(m_db);
+    if (!query.exec(QStringLiteral("SELECT id, path FROM folders"))) { m_error = query.lastError().text(); return false; }
+    while (query.next()) {
+        const QString path = query.value(1).toString();
+        if (path == root || path.startsWith(root + QLatin1Char('/'))) folders << query.value(0).toInt();
+    }
+    query.finish();
+    QVector<int> assets;
+    if (!query.exec(QStringLiteral("SELECT id FROM assets WHERE folder_id IN (%1)").arg(idList(folders)))) {
+        m_error = query.lastError().text(); return false;
+    }
+    while (query.next()) assets << query.value(0).toInt();
+    query.finish();
+    if (!m_db.transaction()) { m_error = m_db.lastError().text(); return false; }
+    if (!deleteAssetRows(assets)
+        || !exec(QStringLiteral("DELETE FROM folders WHERE id IN (%1)").arg(idList(folders)))) {
+        m_db.rollback(); return false;
     }
     if (!m_db.commit()) { m_error = m_db.lastError().text(); m_db.rollback(); return false; }
     return true;

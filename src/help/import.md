@@ -57,6 +57,13 @@ Right-click any preset ▸ Auto-apply on import… and say which photos get it: 
 
 An XMP sidecar beside a photo supplies its rating, colour label, keywords, title, caption, creator and copyright on import, and its edit: OmaRAW's own exactly, or the source editor's converted as a starting point. A RAW's sidecar uses the photo's base name (DSC_0833.NEF → DSC_0833.xmp), so other compatible editors can share it. Writing is off by default: Preferences ▸ Write metadata sidecars automatically keeps a sidecar current (metadata and edit), Library ▸ Sidecars ▸ Write Sidecars for Selection Now writes once, and Read Sidecars for Selection takes them back. Write Into DNG, JPEG and TIFF Files puts those formats' metadata inside the file. When another program has changed a sidecar, the inspector's Sidecar row lists each difference with a button to take it.
 
+## Stacking bursts
+
+Turn on **Stack bursts** and set **Within** to stack the new photos as they are
+imported: shots taken within that many seconds of the previous one become a
+stack, topped by the first shot. 1 s suits a fast burst. Photos that are already
+stacked are left alone, and you can change any stack afterwards.
+
 ## Smart Previews
 
 Enable **Build Smart Previews after import** to prepare smaller editable sources beside the catalog. Wait for the preview job to finish before disconnecting originals. You can also build or discard them later through **Library → Smart Previews**. Develop marks offline preview editing clearly; reconnect an original for full detail and export. Previews are not backups of your photos.

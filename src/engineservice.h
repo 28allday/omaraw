@@ -449,6 +449,12 @@ public:
     // only after the user finishes sampling. Existing shapes are preserved.
     Q_INVOKABLE void pickColourRange(double x, double y, double x2, double y2, bool newLocal);
     Q_INVOKABLE void setColourRange(double width, double softness);
+    // Luminosity masks: a new whole-picture local selected by brightness, from
+    // a preset ("highlights", "midtones", "shadows") or the tone under a
+    // click or drag; then its band on the active local, 0..1 in range units.
+    Q_INVOKABLE void addLuminosityMask(const QString &preset);
+    Q_INVOKABLE void pickLuminosity(double x, double y, double x2, double y2);
+    Q_INVOKABLE void setLuminosityRange(double from, double to, double softness, bool inverse);
     // Edge refinement of the active local's mask: blur and feather radii
     // in full-image pixels, guide 0 input / 1 output, curve -1..1.
     Q_INVOKABLE void setMaskRefine(double blur, double feather, int guide, double contrast, double brightness);

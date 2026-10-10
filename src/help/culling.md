@@ -11,7 +11,9 @@ All of these act on one photo or the whole selection.
 
 ## Stacks
 
-Select a burst and press Ctrl+G to stack it. The grid shows the top photo with a count; S expands or collapses, Shift+S makes the current photo the top, Ctrl+Shift+G unstacks. Auto-Stack by Capture Time in the card menu groups shots taken within a chosen number of seconds.
+Select a burst and press Ctrl+G to stack it. The photo you are on (the one you last clicked or moved to) becomes the top, so choose the best shot before stacking. The grid and Filmstrip show the top photo with a count; S expands or collapses, Shift+S makes the current photo the top, Ctrl+Shift+G unstacks. In an open stack every photo is numbered, 1/5 to 5/5, and the top keeps its filled badge. The Filmstrip outlines a stack, collapsed or open, as one group.
+
+**Auto-Stack by Capture Time** (Ctrl+Alt+G, or Library ▸ Stacks) groups shots taken within a chosen number of seconds of each other: the selected photos when two or more are selected, otherwise everything shown. To stack bursts as they arrive, turn on **Stack bursts** in the Import panel.
 
 ## Variants
 

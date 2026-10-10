@@ -2,8 +2,8 @@
 
 Adjust part of the photo in **Develop → Masks**. Each mask has six folding
 sections: **Colour range**, **Colour**, **Tone**, **Detail**, **Shapes & overlay**
-and **Edge refinement**. One section opens at a time; all existing controls
-remain available.
+and **Edge refinement**; a luminosity mask adds **Luminosity range**. One
+section opens at a time; all existing controls remain available.
 
 ## Select a colour, such as skin
 
@@ -39,6 +39,24 @@ The original Luminance, Hue and Colour bands, pipettes, inversion, From, To and
 Falloff controls are still there. Use **Tone** for exposure, black, contrast,
 highlights and shadows; **Detail** for clarity, sharpness and colour moiré.
 
+
+## Select by brightness: luminosity masks
+
+1. Choose **Luminosity**, then **Highlights**, **Midtones** or **Shadows**. The
+   mask covers that range of tones across the whole picture, with no drawing,
+   and shows its coverage. **Pick a Tone…** instead makes the mask around the
+   brightness you click or drag over; Escape cancels.
+2. Under **Luminosity range**, **From** and **To** set the darkest and brightest
+   tones fully in the mask, on a scale of 0 to 100; **Softness** fades it into
+   the tones either side. From at 0 always includes the deepest shadows, and To
+   at 100 the brightest highlights. **Invert** selects every tone except the range.
+3. Open **Tone**, **Colour** or **Detail** and adjust. For example, lower
+   **Exposure** on Highlights to hold a bright sky, or add **Warmth** to Shadows.
+
+Brightness is measured on the scene's light, before tone mapping and the
+tone curve, so those do not move the mask. To limit it to one
+area, add a radial or pen shape in **Shapes & overlay**; to limit it to one
+colour, use **Sample colour…** under **Colour range**.
 
 ## AI object masks
 

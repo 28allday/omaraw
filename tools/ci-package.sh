@@ -6,24 +6,33 @@ set -euo pipefail
   echo 'Run this helper only on a disposable GitHub-hosted runner.' >&2; exit 1;
 }
 architecture=${1:?Expected x86_64 or aarch64}
+# x86 has two builds: the Omarchy stable mirror, and current Arch (Omarchy
+# edge), which can carry newer library series such as OpenEXR.
+repositories=${2:-omarchy}
 [[ $(uname -m) == "$architecture" ]] || { echo 'A native runner is required.' >&2; exit 1; }
-case "$architecture" in
-  x86_64)
+name_openexr=0
+case "$architecture/$repositories" in
+  x86_64/omarchy|x86_64/current)
     rootfs_url=https://geo.mirror.pkgbuild.com/iso/2026.10.01/archlinux-bootstrap-x86_64.tar.zst
     fingerprint=3E80CA1A8B89F69CBA57D98A76A5EF9054449A5C
     keyring=archlinux
     strip=1
-    # Match the repositories available to Omarchy stable installations.
-    mirror='https://stable-mirror.omarchy.org/$repo/os/$arch'
+    if [[ $repositories == omarchy ]]; then
+      # Match the repositories available to Omarchy stable installations.
+      mirror='https://stable-mirror.omarchy.org/$repo/os/$arch'
+    else
+      mirror='https://geo.mirror.pkgbuild.com/$repo/os/$arch'
+      name_openexr=1
+    fi
     ;;
-  aarch64)
+  aarch64/omarchy)
     rootfs_url=https://fl.us.mirror.archlinuxarm.org/os/ArchLinuxARM-aarch64-latest.tar.gz
     fingerprint=68B3537F39A313B3E574D06777193F152BDBE6A6
     keyring=archlinuxarm
     strip=0
     mirror='https://fl.us.mirror.archlinuxarm.org/$arch/$repo'
     ;;
-  *) echo 'Unsupported architecture' >&2; exit 1 ;;
+  *) echo 'Unsupported architecture or repositories' >&2; exit 1 ;;
 esac
 source_root=$(git rev-parse --show-toplevel)
 output="$source_root/dist"
@@ -86,9 +95,9 @@ sudo cp "$work/source.bundle" "$rootfs/work/source.bundle"
   test "$(git rev-parse HEAD)" = "$1"
   test -z "$(git status --porcelain)"
   export OMARAW_BUILD_JOBS=2 OMP_NUM_THREADS=2 OMP_THREAD_LIMIT=2 SOURCE_DATE_EPOCH="$2"
-  export PKGEXT=.pkg.tar.zst SRCEXT=.src.tar.gz
+  export PKGEXT=.pkg.tar.zst SRCEXT=.src.tar.gz OMARAW_NAME_OPENEXR="$3"
   ./bin/package --syncdeps --noconfirm
-' bash "$revision" "$epoch"
+' bash "$revision" "$epoch" "$name_openexr"
 "${nspawn[@]}" /bin/bash -euc '
   package=(/work/source/build-package/omaraw-*.pkg.tar.zst)
   test "${#package[@]}" = 1
@@ -108,4 +117,4 @@ sudo cp "$rootfs/work/source/build-package/"*.pkg.tar.zst \
   "$rootfs/work/source/build-package/"*.src.tar.gz \
   "$rootfs/work/source/build-package/SHA256SUMS" "$output/packages/"
 sudo chown -R "$(id -u):$(id -g)" "$output"
-printf 'Verified %s candidate from %s; no release was published.\n' "$architecture" "$revision" >> "$GITHUB_STEP_SUMMARY"
+printf 'Verified %s (%s repositories) candidate from %s; no release was published.\n' "$architecture" "$repositories" "$revision" >> "$GITHUB_STEP_SUMMARY"

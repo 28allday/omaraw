@@ -336,6 +336,9 @@ public:
     // bytesFree, removable, dcim}] — the system and home volumes left out.
     Q_INVOKABLE QVariantList devices() const;
     Q_INVOKABLE QString relinkFolder(int folderId, const QString &newPathOrUrl);
+    // Takes a folder, its subfolders and their photos out of the catalog
+    // (edits included); the files stay on disk and can be imported again.
+    Q_INVOKABLE bool removeFolder(int folderId);
     Q_INVOKABLE int createAlbum(const QString &name, int parentId = 0);
     Q_INVOKABLE bool setAlbumParent(int id, int parentId);
     // An export finished for this file: the catalog's Recently Exported follows.
@@ -400,6 +403,8 @@ public:
     Q_INVOKABLE void clearSelection();
     Q_INVOKABLE bool isSelected(int id) const { return m_selection.contains(id); }
     Q_INVOKABLE void step(int delta); // move current by delta rows, replace selection
+    // Shift+arrow: moves the current photo and selects from the anchor to it.
+    Q_INVOKABLE void extendSelection(int delta);
     Q_INVOKABLE QVariantList selectedIds() const;
     // Compare: the other selected photo, else the next one in the browser (0 if none).
     Q_INVOKABLE int comparePartner() const;
@@ -474,6 +479,7 @@ public:
     Q_INVOKABLE void stackSelection();
     Q_INVOKABLE void unstackSelection();
     // Groups the photos currently shown whose capture times sit within `seconds`.
+    // Selected photos when two or more are selected, otherwise the whole source.
     Q_INVOKABLE int autoStackShown(int seconds);
     Q_INVOKABLE void setStackTop(int id = 0);
     // Expand or collapse the stack `id` belongs to (current when 0).

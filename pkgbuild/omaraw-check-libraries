@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+# Report system libraries that OmaRAW links but this system no longer has.
+# Arch can replace a library series (OpenEXR 3.4 -> 3.5, for example) under an
+# installed OmaRAW. Pacman's dependencies cannot see that without blocking the
+# whole system update, so pacman runs this after updates and installs instead.
+# Usage: check-libraries [--quiet] [ROOT]   Exit: 0 fine, 1 missing, 2 unchecked.
+set -uo pipefail
+quiet=0
+if [[ ${1:-} == --quiet ]]; then quiet=1; shift; fi
+root=${1:-}
+app="$root/usr/bin/omaraw"
+private="$root/usr/lib/omaraw"
+[[ -f $app ]] || exit 0
+command -v ldd >/dev/null || exit 2
+
+files=("$app")
+while IFS= read -r -d '' file; do files+=("$file"); done \
+  < <(find "$private/engine" -type f -name '*.so*' -print0 2>/dev/null)
+
+declare -A missing=()
+while read -r library _ found _; do
+  [[ $found == not ]] || continue
+  # Our own libraries always travel with the package; only system ones matter.
+  [[ -n $(find "$private" -name "$library" -print -quit 2>/dev/null) ]] && continue
+  missing[$library]=1
+done < <(ldd "${files[@]}" 2>/dev/null | grep -F '=> not found')
+
+((${#missing[@]})) || exit 0
+((quiet)) && exit 1
+mapfile -t names < <(printf '%s\n' "${!missing[@]}" | sort)
+cat <<EOF
+
+OmaRAW cannot start: your system's libraries were updated and no longer
+match this OmaRAW build. Your system is fine; only OmaRAW needs updating.
+Missing: ${names[*]}
+
+Install the OmaRAW build for your system as your normal user:
+  curl -fLO https://raw.githubusercontent.com/28allday/omaraw/master/install.sh
+  bash install.sh
+If it still reports this, a matching release is on its way:
+  https://github.com/28allday/omaraw/issues
+
+EOF
+exit 1
