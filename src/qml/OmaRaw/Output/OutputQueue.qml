@@ -7,6 +7,9 @@ import OmaRaw.Ui
 // state, a progress bar while a batch runs, cancel/clear.
 Rectangle {
     id: root
+    // An empty queue is a single bar. Rows and the job actions appear once
+    // there is something to show.
+    readonly property bool collapsed: engine.exportQueue.length === 0 && engine.exportQueueError === "" && !engine.exportPaused
     color: Theme.panelBg
     Rectangle { width: parent.width; height: Theme.hairline; color: Theme.border }
     Item {
@@ -39,6 +42,7 @@ Rectangle {
             }
         }
         Row {
+            visible: !root.collapsed
             anchors.right: parent.right; anchors.rightMargin: Theme.s2
             anchors.verticalCenter: parent.verticalCenter
             spacing: Theme.s1

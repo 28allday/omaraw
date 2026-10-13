@@ -61,23 +61,33 @@ Column {
         text: qsTr("A contrast and saturation preset inspired by your camera’s JPEGs. Exposure, white balance and local edits stay. Undo restores your previous look.")
     }
     Guide { visible: root.state.raw === true; text: qsTr("Colour profile"); color: Theme.textPrimary }
-    SearchField {
-        id: search; objectName: "cameraProfileSearch"
-        x: Theme.s3; width: parent.width - 2*Theme.s3
-        visible: root.compatible.length > 6
-        placeholder: qsTr("Search camera profiles")
+    Item {
+        width: parent.width
+        height: search.visible ? search.implicitHeight : 0
+        visible: search.visible
+        SearchField {
+            id: search; objectName: "cameraProfileSearch"
+            x: Theme.s3; width: parent.width - 2*Theme.s3
+            visible: root.compatible.length > 6
+            placeholder: qsTr("Search camera profiles")
+        }
     }
-    ComboField {
-        objectName: "cameraProfileChoice"
-        x: Theme.s3; width: parent.width - 2*Theme.s3
-        model: root.choices.map(p => p.name)
-        currentIndex: root.choices.findIndex(p => p.key === root.selectedKey)
-        enabled: engine.imageId >= 0 && root.state.raw === true && !engine.busy
-        tipTitle: qsTr("Camera profile")
-        tip: qsTr("Only profiles for this camera are shown. Automatic colour uses your regular tone controls. Other profiles supply their own colour and contrast and replace Print stock.")
-        onActivated: i => {
-            const p = root.choices[i]
-            if (p && p.key !== "film" && p.key !== "current") engine.selectCameraProfile(p.key)
+    Item {
+        width: parent.width
+        height: profileChoice.implicitHeight
+        ComboField {
+            id: profileChoice
+            objectName: "cameraProfileChoice"
+            x: Theme.s3; width: parent.width - 2 * Theme.s3
+            model: root.choices.map(p => p.name)
+            currentIndex: root.choices.findIndex(p => p.key === root.selectedKey)
+            enabled: engine.imageId >= 0 && root.state.raw === true && !engine.busy
+            tipTitle: qsTr("Camera profile")
+            tip: qsTr("Only profiles for this camera are shown. Automatic colour uses your regular tone controls. Other profiles supply their own colour and contrast and replace Print stock.")
+            onActivated: i => {
+                const p = root.choices[i]
+                if (p && p.key !== "film" && p.key !== "current") engine.selectCameraProfile(p.key)
+            }
         }
     }
     Guide {

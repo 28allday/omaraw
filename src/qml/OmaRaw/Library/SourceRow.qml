@@ -14,12 +14,14 @@ Rectangle {
     property bool expanded: true
     // A tiny picture in place of the icon (an album's cover).
     property string thumb: ""
+    // Output's lists want a taller row than the compact library tree.
+    property int rowHeight: Theme.hRow
     signal clicked()
     signal toggled()
     signal contextRequested()
 
     width: parent ? parent.width : 200
-    height: Theme.hRow
+    height: rowHeight
     color: hover.hovered ? Theme.hovered(current ? Theme.controlBg : Theme.panelBg)
                         : current ? Theme.controlBg : "transparent"
     opacity: online ? 1 : 0.55

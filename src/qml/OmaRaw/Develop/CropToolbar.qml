@@ -51,6 +51,7 @@ Rectangle {
             IconButton {
                 objectName: "cropAspectSwap"
                 iconName: "rotate-cw"; text: qsTr("Swap landscape and portrait")
+                onScrim: true
                 enabled: (engine.crop.ratioN || 0) > 0 && (engine.crop.ratioD || 0) !== 0
                 onClicked: root.overlay.flipRatio()
             }
@@ -86,6 +87,7 @@ Rectangle {
                 objectName: "resetCropFrame"
                 iconName: "rotate-ccw"; text: qsTr("Reset crop frame")
                 tip: qsTr("Restores the whole frame and Free aspect ratio. Rotation and perspective have their own reset.")
+                onScrim: true
                 onClicked: root.overlay.reset()
             }
             ToolButton {
@@ -169,7 +171,7 @@ Rectangle {
                 : root.overlay.guided ? qsTr("Drag along two vertical edges or two horizontal edges in the photo, then click Apply guides. Use four guides for both directions.") : ""
             text: [engine.geometryStatus, drawingHint].filter(s => s !== "").join("\n")
             textFormat: Text.PlainText; wrapMode: Text.WordWrap
-            font.family: Theme.fontFamily; font.pixelSize: Theme.fsLabel; color: Theme.textSecondary
+            font.family: Theme.fontFamily; font.pixelSize: Theme.fsLabel; color: Theme.scrimText
         }
     }
 }

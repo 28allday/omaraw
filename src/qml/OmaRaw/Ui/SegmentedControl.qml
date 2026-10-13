@@ -47,6 +47,11 @@ Rectangle {
 
     readonly property var model: icons.length ? icons : labels
     readonly property bool iconMode: icons.length > 0
+    // Share an explicit width equally. Leave this off unless width is set;
+    // implicit width stays the text size either way.
+    property bool fill: false
+    readonly property int segmentWidth: fill && !iconMode && model.length > 0
+                                        ? Math.max(0, Math.floor((width - Theme.hairline * 2) / model.length)) : 0
 
     implicitWidth: row.implicitWidth + Theme.hairline * 2
     implicitHeight: Theme.hControl
@@ -70,6 +75,7 @@ Rectangle {
 
                 width: root.iconMode
                        ? Theme.szIconHit
+                       : root.segmentWidth > 0 ? root.segmentWidth
                        : segLabel.implicitWidth + Theme.s3 * 2
                 height: root.height - Theme.hairline * 2
 
@@ -115,9 +121,15 @@ Rectangle {
 
                 Text {
                     id: segLabel
-                    anchors.centerIn: parent
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.leftMargin: Theme.s2
+                    anchors.rightMargin: Theme.s2
+                    anchors.verticalCenter: parent.verticalCenter
                     visible: !root.iconMode
                     text: root.iconMode ? "" : seg.modelData
+                    horizontalAlignment: Text.AlignHCenter
+                    elide: Text.ElideRight
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.fsControl
                     color: seg.current ? Theme.accentText : Theme.textSecondary

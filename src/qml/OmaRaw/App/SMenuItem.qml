@@ -4,6 +4,8 @@ import OmaRaw.Ui
 
 // Menu entry: label left, shortcut right in muted tabular type, a check
 // glyph for checkable entries, a chevron for submenu titles.
+// Every row reserves the check column, so a checkable command such as
+// Crop & Straighten lines up with the plain commands beside it.
 MenuItem {
     id: mi
     property string shortcut: ""
@@ -15,13 +17,13 @@ MenuItem {
     // still elide so they cannot stretch a menu across the entire window.
     implicitWidth: Math.min(480, Math.max(236,
         Math.ceil(label.implicitWidth + hint.implicitWidth) + Theme.s3 * 2 + Theme.s2
-        + (mi.checkable ? Theme.szIcon : 0) + (mi.subMenu ? Theme.szIcon : 0)))
+        + Theme.szIcon + (mi.subMenu ? Theme.szIcon : 0)))
     padding: 0
     contentItem: Item {
         Text {
             id: label
             anchors.left: parent.left
-            anchors.leftMargin: Theme.s3 + (mi.checkable ? Theme.szIcon : 0)
+            anchors.leftMargin: Theme.s3 + Theme.szIcon
             anchors.right: hint.left
             anchors.rightMargin: Theme.s2
             anchors.verticalCenter: parent.verticalCenter

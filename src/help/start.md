@@ -43,7 +43,7 @@ The menus group commands by task:
 - **Library:** albums, Quick Collection, stacks, duplicates, sidecars and offline files.
 - **Photo:** ratings, flags, labels, variants, rename, move, reveal, remove and trash.
 - **Adjustments:** automatic corrections, copy/paste/sync settings, masks, crop, retouch, presets, snapshots and reset.
-- **View:** browsing, comparison, exposure overlays, Colour Critical, viewer background, panels and workspaces.
+- **View:** browsing, comparison, exposure overlays, Light interface, Colour Critical, viewer background, panels and workspaces.
 - **Camera:** connection, live view and capture.
 - **Help:** guide, command search, shortcuts and About.
 

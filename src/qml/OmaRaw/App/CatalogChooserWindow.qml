@@ -16,7 +16,7 @@ C.ApplicationWindow {
     minimumWidth: 420
     minimumHeight: 240
     color: Theme.windowBg
-    palette: Theme.colourCritical ? criticalPalette : defaultPalette
+    palette: (Theme.light || Theme.colourCritical) ? criticalPalette : defaultPalette
     Palette { id: defaultPalette }
     Palette {
         id: criticalPalette
@@ -34,6 +34,7 @@ C.ApplicationWindow {
         }
     }
     Binding { target: Theme; property: "colourCritical"; value: backend.colourCritical }
+    Binding { target: Theme; property: "light"; value: backend.lightInterface && !backend.colourCritical }
     Binding { target: Theme; property: "highContrast"; value: backend.highContrast }
     Binding { target: Theme; property: "reducedMotion"; value: backend.reducedMotion }
 

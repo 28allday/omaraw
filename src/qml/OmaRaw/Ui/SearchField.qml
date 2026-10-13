@@ -28,7 +28,7 @@ Rectangle {
     signal cleared()
 
     implicitWidth: 200
-    implicitHeight: Theme.hControl
+    implicitHeight: Theme.hField
     color: Theme.inputBg
     radius: Theme.rControl
     border.width: Theme.hairline
@@ -51,7 +51,7 @@ Rectangle {
         size: Theme.szIcon
         color: Theme.textMuted
         anchors.left: parent.left
-        anchors.leftMargin: Theme.s2
+        anchors.leftMargin: Theme.s3
         anchors.verticalCenter: parent.verticalCenter
     }
 

@@ -84,6 +84,25 @@ C.Dialog {
                     objectName: "preferencesAppearance"
                     visible: root.page === 0; width: parent.width; spacing: Theme.s3
                     Heading { title: qsTr("Interface") }
+                    Text {
+                        width: parent.width
+                        text: qsTr("Appearance")
+                        color: Theme.textSecondary
+                        font.family: Theme.fontFamily; font.pixelSize: Theme.fsLabel; font.weight: Theme.wHeading
+                    }
+                    SegmentedControl {
+                        objectName: "interfaceAppearance"
+                        enabled: !backend.colourCritical
+                        labels: [qsTr("Dark"), qsTr("Light")]
+                        tips: [qsTr("Dark panels and light text."), qsTr("Light panels and dark text. Photographs keep a neutral surround.")]
+                        currentIndex: backend.lightInterface ? 1 : 0
+                        onActivated: i => backend.lightInterface = i === 1
+                    }
+                    Note {
+                        text: backend.colourCritical
+                              ? qsTr("Colour Critical uses its own neutral interface. Turn it off to choose Dark or Light.")
+                              : qsTr("Light brightens the panels and controls. The photograph keeps a neutral surround, so the picture does not change with the interface.")
+                    }
                     Setting { controlName: "colourCriticalPreference"; label: qsTr("Colour Critical"); description: qsTr("Use a neutral grey interface and a fixed dark grey surround for judging colour."); checked: backend.colourCritical; onClicked: backend.colourCritical = !backend.colourCritical }
                     Setting { controlName: "highContrastPreference"; label: qsTr("High contrast"); description: qsTr("Make interface text and borders easier to distinguish."); checked: backend.highContrast; onClicked: backend.highContrast = !backend.highContrast }
                     Setting { controlName: "reducedMotionPreference"; label: qsTr("Reduced motion"); description: qsTr("Open menus and panels without animation."); checked: backend.reducedMotion; onClicked: backend.reducedMotion = !backend.reducedMotion }
