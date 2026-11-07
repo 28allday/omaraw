@@ -7,7 +7,8 @@ set -euo pipefail
 }
 architecture=${1:?Expected x86_64 or aarch64}
 # x86 has two builds: the Omarchy stable mirror, and current Arch (Omarchy
-# edge), which can carry newer library series such as OpenEXR.
+# edge), which can carry newer library series such as OpenEXR. ARM builds
+# against the Omarchy Mac stable mirror.
 repositories=${2:-omarchy}
 [[ $(uname -m) == "$architecture" ]] || { echo 'A native runner is required.' >&2; exit 1; }
 name_openexr=0
@@ -30,7 +31,10 @@ case "$architecture/$repositories" in
     fingerprint=68B3537F39A313B3E574D06777193F152BDBE6A6
     keyring=archlinuxarm
     strip=0
-    mirror='https://fl.us.mirror.archlinuxarm.org/$arch/$repo'
+    # Match the repositories available to Omarchy Mac installations, as the
+    # x86 Omarchy build does: the live ALARM mirror runs ahead of them, and
+    # the package's library floors come from the build environment.
+    mirror='https://arm-stable-mirror.omarchy.org/$arch/$repo'
     ;;
   *) echo 'Unsupported architecture or repositories' >&2; exit 1 ;;
 esac
