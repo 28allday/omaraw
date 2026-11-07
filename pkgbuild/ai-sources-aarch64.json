@@ -59,10 +59,10 @@
     },
     {
       "replaces": "python-3.14.7-1-x86_64.pkg.tar.zst",
-      "name": "python-3.14.7-1-aarch64.pkg.tar.xz",
-      "url": "https://fl.us.mirror.archlinuxarm.org/aarch64/core/python-3.14.7-1-aarch64.pkg.tar.xz",
-      "sha256": "17015e87d76198ffda880a95fb5ce46f340a68247bd2b4148a7078d1d3f1f250",
-      "bytes": 13514884
+      "name": "python-3.14.9-1-aarch64.pkg.tar.xz",
+      "url": "https://fl.us.mirror.archlinuxarm.org/aarch64/core/python-3.14.9-1-aarch64.pkg.tar.xz",
+      "sha256": "6546b1488434619a68ea3a0b6cb16a9d578b029b120bc2c0b82491bcc273dcb8",
+      "bytes": 13635560
     }
   ]
 }
