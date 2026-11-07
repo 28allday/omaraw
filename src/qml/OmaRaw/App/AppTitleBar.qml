@@ -322,6 +322,8 @@ Rectangle {
             SMenuItem { objectName: "viewLoupeAction"; text: qsTr("Loupe"); tip: qsTr("Show the current photo on its own for a closer look."); shortcut: "E"; checkable: true; checked: root.shell.libraryViewMode === "loupe"; onTriggered: root.shell.showPhotos("loupe") }
             SMenuItem { objectName: "viewCompareAction"; text: qsTr("Compare"); tip: qsTr("Show the current photo beside another selected photo, or the next one."); shortcut: "C"; checkable: true; checked: root.shell.libraryViewMode === "compare"; enabled: !root.shell.libraryBrowsing; onTriggered: root.shell.browserMode = "compare" }
             SMenuItem { objectName: "viewSurveyAction"; text: qsTr("Survey"); tip: qsTr("Show all selected photos together to choose the strongest frames."); shortcut: "N"; checkable: true; checked: root.shell.libraryViewMode === "survey"; enabled: !root.shell.libraryBrowsing; onTriggered: root.shell.browserMode = "survey" }
+            SMenuItem { objectName: "viewNextPhotoAction"; text: qsTr("Next Photo"); tip: qsTr("Move to the next photo; in Survey, to the next surveyed photo."); shortcut: "Right"; onTriggered: root.shell.stepPhoto(1) }
+            SMenuItem { objectName: "viewPreviousPhotoAction"; text: qsTr("Previous Photo"); tip: qsTr("Move to the previous photo; in Survey, to the previous surveyed photo."); shortcut: "Left"; onTriggered: root.shell.stepPhoto(-1) }
             StyledMenu {
                 title: qsTr("Thumbnail Size")
                 enabled: !root.shell.libraryBrowsing

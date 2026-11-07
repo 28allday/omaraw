@@ -540,6 +540,7 @@ C.ApplicationWindow {
     }
     function selectAllPhotos(pick) { libraryWs.selectAllPhotos(pick) }
     function showPhotos(mode) { libraryWs.showPhotos(mode) }
+    function stepPhoto(delta) { libraryWs.stepPhoto(delta) }
     // Offscreen review hook: show a folder in the Library's Browse tab.
     property string browseFolder: ""
     onBrowseFolderChanged: if (browseFolder !== "") browsePhotos(browseFolder)

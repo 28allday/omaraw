@@ -40,8 +40,9 @@ Rectangle {
                     RatingStars { rating: backend.info(parent.parent.modelData).rating || 0; size: 10 }
                     LabelDots { label: backend.info(parent.parent.modelData).label || ""; size: 8 }
                 }
+                // A right-click does nothing here: it used to drop the photo
+                // from the selection, which emptied the survey by surprise (#29).
                 TapHandler { onTapped: backend.setCurrent(parent.modelData) }
-                TapHandler { acceptedButtons: Qt.RightButton; onTapped: backend.select(parent.modelData, 1) }
             }
         }
     }

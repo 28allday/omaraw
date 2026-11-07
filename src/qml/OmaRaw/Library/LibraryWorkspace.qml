@@ -15,7 +15,20 @@ Item {
         folderBrowser.activate(path || "")
     }
     function selectAllPhotos(pick) { if (reviewing) importWorkspace.photoBrowser.pickAll(pick); else if (pick) backend.selectAll(); else backend.clearSelection() }
-    function stepPhoto(delta) { if (reviewing) importWorkspace.photoBrowser.navigate(delta); else backend.step(delta) }
+    function stepPhoto(delta) {
+        if (reviewing) { importWorkspace.photoBrowser.navigate(delta); return }
+        // Survey shows the selection: with several photos there, the arrows
+        // move through them and keep the survey. Stepping replaced the
+        // selection with one photo, which emptied the survey (#23).
+        const surveyed = shell && shell.workspace === "Library" && shell.browserMode === "survey" ? backend.selectedIds() : []
+        if (surveyed.length > 1) {
+            const at = surveyed.indexOf(backend.currentId)
+            const next = Math.max(0, Math.min(surveyed.length - 1, (at < 0 ? 0 : at + delta)))
+            backend.setCurrent(surveyed[next])
+            return
+        }
+        backend.step(delta)
+    }
     function showPhotos(mode) { if (reviewing) importWorkspace.photoBrowser.previewing = mode === "loupe"; else shell.browserMode = mode }
     property var currentInfo: ({})
     function reloadInfo() { currentInfo = backend.info(backend.currentId) }

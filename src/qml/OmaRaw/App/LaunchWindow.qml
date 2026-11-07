@@ -57,7 +57,9 @@ C.ApplicationWindow {
     function enter() { confirmed = true; close() }
     Shortcut { sequence: "Return"; enabled: !buildDetails.opened; onActivated: root.enter() }
     Shortcut { sequence: "Enter"; enabled: !buildDetails.opened; onActivated: root.enter() }
-    Shortcut { sequence: "Escape"; enabled: !buildDetails.opened; onActivated: root.close() }
+    // Escape dismisses the welcome like Continue does; it used to quit the
+    // app (#25). Closing the window itself still quits.
+    Shortcut { sequence: "Escape"; enabled: !buildDetails.opened; onActivated: root.enter() }
 
     // Keep the compact layout together on small screens. An opaque window
     // avoids transparent corner cutouts inside the compositor's square frame.
