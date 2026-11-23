@@ -163,10 +163,14 @@ int AutoTags::workerMain() {
                     != "c789161ed43c8269fcd4e67c67eeeb4e80c622da2eb296a20bc6007bd18a0b7d")
                     throw std::runtime_error("Bundled auto-tag model failed verification.");
                 // OpenCV 5's auto engine can ignore backend/target requests.
-                // Use the 4.x-compatible engine so the CPU choice is explicit.
+                // Name a built-in CPU engine so the choice is explicit: 5.0's
+                // 4.x-compatible engine, or 5.1's ENGINE_OPENCV, which replaced
+                // it (same scores for this model within 3e-6).
                 net = cv::dnn::readNetFromONNX(reinterpret_cast<const char *>(bytes.constData()), bytes.size()
-#if CV_VERSION_MAJOR >= 5
+#if CV_VERSION_MAJOR == 5 && CV_VERSION_MINOR == 0
                                              , cv::dnn::ENGINE_CLASSIC
+#elif CV_VERSION_MAJOR >= 5
+                                             , cv::dnn::ENGINE_OPENCV
 #endif
                                              );
                 net.setPreferableBackend(cv::dnn::DNN_BACKEND_OPENCV);
