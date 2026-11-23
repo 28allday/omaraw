@@ -43,11 +43,52 @@ download() {
 }
 printf 'Downloading OmaRAW %s…\n' "$version"
 listed() { awk -v name="$1" '$2 == name || $2 == "*" name {found=1} END {exit !found}' "$temporary/SHA256SUMS"; }
+verified() {
+  local checksum
+  checksum=$(awk -v name="$1" '$2 == name || $2 == "*" name { print $1 }' "$temporary/SHA256SUMS")
+  [[ $checksum =~ ^[0-9a-fA-F]{64}$ ]] &&
+    (cd "$temporary" && printf '%s  %s\n' "$checksum" "$1" | sha256sum --check --status)
+}
+series() { sed -E 's/^[0-9]+://; s/-[^-]*$//; s/^([0-9]+(\.[0-9]+)?).*/\1/' <<< "$1"; }
+# A release can carry one package per system library series, such as Omarchy
+# stable and Omarchy edge (current Arch). LIBRARIES lists the system libraries
+# each package loads and the Arch package that provides them. Choose the package
+# with the fewest libraries this system lacks: a library counts as present when
+# it is installed, or when its package is not installed yet and the repositories
+# offer the series it was built against. Ties keep the release's order.
+choose_by_libraries() {
+  local -A have=() installed=() repository=() missing=()
+  local -a order=()
+  local name library owner version best='' fewest=''
+  command -v pacman >/dev/null || return 1
+  while read -r library _; do have[$library]=1; done < <(ldconfig -p 2>/dev/null | awk 'NR > 1 {print $1}')
+  while read -r name library owner version; do
+    [[ -n $version && $name != \#* && $name =~ -$architecture(-[A-Za-z0-9.]+)?\.pkg\.tar\.zst$ ]] || continue
+    listed "$name" || continue
+    [[ -v missing[$name] ]] || { missing[$name]=0; order+=("$name"); }
+    [[ -v have[$library] ]] && continue
+    if [[ ! -v installed[$owner] ]]; then
+      installed[$owner]=$(pacman -Q "$owner" 2>/dev/null | awk '{print $2}') || true
+      repository[$owner]=$(pacman -Si "$owner" 2>/dev/null | sed -n '1,/^Version/s/^Version *: *//p') || true
+    fi
+    if [[ -n ${installed[$owner]} || -z ${repository[$owner]} ||
+          $(series "${repository[$owner]}") != "$(series "$version")" ]]; then
+      missing[$name]=$(( ${missing[$name]} + 1 ))
+    fi
+  done < "$temporary/LIBRARIES"
+  for name in "${order[@]}"; do
+    if [[ -z $fewest ]] || (( ${missing[$name]} < fewest )); then best=$name; fewest=${missing[$name]}; fi
+  done
+  [[ -n $best ]] || return 1
+  package=$best
+}
 selected=0
 if download SHA256SUMS; then
-  # A release may add a build for a newer OpenEXR series, such as current Arch on
-  # Omarchy edge. Use it when this system's OpenEXR matches; pacman checks the rest.
-  if command -v pacman >/dev/null; then
+  if listed LIBRARIES && download LIBRARIES 2>/dev/null && verified LIBRARIES && choose_by_libraries; then
+    :
+  # Older releases name a build for a newer OpenEXR series instead. Use it when
+  # this system's OpenEXR matches; pacman checks the rest.
+  elif command -v pacman >/dev/null; then
     openexr=$(pacman -Q openexr 2>/dev/null | awk '{print $2}') || true
     [[ -n $openexr ]] || openexr=$(pacman -Si openexr 2>/dev/null | sed -n '1,/^Version/s/^Version *: *//p') || true
     if [[ $openexr =~ ^([0-9]+:)?([0-9]+\.[0-9]+) ]]; then

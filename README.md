@@ -38,9 +38,8 @@ requirements. It also installs the agent skill described below. You do not need
 to compile the app or install its processing engine separately.
 
 The installer selects `x86_64` or `aarch64` automatically. Where a release also
-offers an x86 package named for a newer OpenEXR series (for example
-`…-x86_64-openexr3.5.pkg.tar.zst`, built for Omarchy edge), the installer uses it
-when your system's OpenEXR matches. ARM packages target
+offers an x86 package for Omarchy edge (`…-x86_64-current.pkg.tar.zst`), the
+installer picks whichever package your system's libraries can start. ARM packages target
 Omarchy Mac on Asahi Linux; they are not macOS apps.
 On an Asahi Mac, install `vulkan-asahi` for GPU acceleration if it is missing.
 

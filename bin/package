@@ -36,21 +36,22 @@ if [[ $(uname -m) == aarch64 ]]; then
     SOURCES[$index]=$target
   done
 fi
-# A second x86 build against current Arch can link a newer OpenEXR than the
-# Omarchy stable build. Name it by that OpenEXR series so one release can carry
-# both and the installer can choose the package that loads on each system.
-if [[ ${OMARAW_NAME_OPENEXR:-} == 1 ]]; then
-  openexr=$(pacman -Q openexr | awk '{print $2}')
-  series=openexr$(cut -d. -f1,2 <<< "${openexr#*:}")
+# A second x86 build against current Arch (Omarchy edge) can link newer library
+# series than the Omarchy stable build. Name it with a suffix so one release can
+# carry both; the release's LIBRARIES manifest lets the installer choose the
+# package that loads on each system.
+suffix=${OMARAW_PACKAGE_SUFFIX:-}
+if [[ -n $suffix ]]; then
+  [[ $suffix =~ ^[a-z0-9]+$ ]] || { printf 'Invalid OMARAW_PACKAGE_SUFFIX: %s\n' "$suffix" >&2; exit 1; }
   for index in "${!BUILT[@]}"; do
     file=${BUILT[$index]}
-    target=${file/.pkg.tar/-$series.pkg.tar}
+    target=${file/.pkg.tar/-$suffix.pkg.tar}
     mv -- "$file" "$target"
     BUILT[$index]=$target
   done
   for index in "${!SOURCES[@]}"; do
     file=${SOURCES[$index]}
-    target=${file/.src.tar/-$series.src.tar}
+    target=${file/.src.tar/-$suffix.src.tar}
     mv -- "$file" "$target"
     SOURCES[$index]=$target
   done

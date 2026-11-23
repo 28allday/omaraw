@@ -67,9 +67,14 @@ with networking disabled. Hosted runners do not qualify Apple GPU behavior.
 The main x86 builder synchronises the entire disposable root with Omarchy's
 stable mirror, including downgrades from a newer bootstrap. A second x86 job
 builds against current Arch, as used by Omarchy edge, whose libraries can be a
-newer series. Its package and complete-source names add that OpenEXR series,
-such as `-openexr3.5`, so both x86 packages can be attached to one release; the
-installer chooses the one matching the system's OpenEXR. The ARM builder uses the
+newer series. Its package and complete-source names add `-current`, so both x86
+packages can be attached to one release. Each release also carries `LIBRARIES`,
+written by `tools/release-libraries.py list` from the finished packages: every
+system library each package loads and the Arch package that provides it. The
+installer chooses the package with the fewest of those libraries missing on the
+system (installed, or available from its repositories in the same series), so
+Omarchy stable and edge each get the package that starts. List `LIBRARIES` in
+the release's `SHA256SUMS`; the installer ignores it otherwise. The ARM builder uses the
 Arch Linux ARM repositories used by Omarchy Mac. Package dependencies record
 the OpenEXR, OpenJPH and Imath versions used by each builder, as minimums only:
 an upper bound would block users' whole system update whenever a repository
@@ -78,9 +83,9 @@ moves to a newer library series. Instead the package installs
 transaction changing a system library, and after OmaRAW is installed or
 upgraded. If OmaRAW's libraries are missing it prints how to install the
 matching build; it never fails the transaction. The **Library watch** workflow
-compares the latest release with each builder's repositories daily and opens
-an issue when one has moved to a series no release package was built for, so a
-rebuilt release can follow. Validation also installs
+checks the latest release's `LIBRARIES` against each builder's repositories
+daily and opens an issue when one no longer provides every library of any
+package in that release, so a rebuilt release can follow. Validation also installs
 standalone darktable and checks that OmaRAW still loads its own private engine.
 Repository URLs and package versions are retained with the build logs.
 
